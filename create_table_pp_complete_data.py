@@ -10,7 +10,7 @@ def main(recreate: bool):
 
     environment_variables = EnvironmentVariables()
 
-    url = postgres_connection_string = environment_variables.get_postgres_connection_string()
+    url = postgres_connection_string = environment_variables.get_postgres_psycopg3_connection_string()
     engine = create_engine(url)
 
     with engine.connect() as connection:
