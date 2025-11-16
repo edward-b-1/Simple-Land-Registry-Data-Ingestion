@@ -273,6 +273,8 @@ def database_upload(
     columns = '(transaction_unique_id, price, transaction_date, postcode, property_type, new_tag, lease, primary_address_object_name, secondary_address_object_name, street, locality, town_city, district, county, ppd_cat, record_op)'
     with psycopg.connect(postgres_connection_string) as connection:
         with connection.cursor() as cursor:
+            cursor.execute("TRUNCATE TABLE land_registry_simple.pp_complete_data")
+
             with cursor.copy(f'COPY land_registry_simple.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL \'\\N\')') as copy:
                 copy.write(buffer.read())
         connection.commit()
