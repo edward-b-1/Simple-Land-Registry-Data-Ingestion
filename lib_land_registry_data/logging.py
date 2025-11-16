@@ -38,7 +38,7 @@ def set_logger_process_name(process_name: str) -> None:
 @typechecked
 def create_stdout_log_handler() -> Handler:
     stdout_log_formatter = logging.Formatter(
-        fmt='%(name)s: %(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(process)d | %(message)s',
+        fmt='%(name)s: %(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(message)s', # | %(process)d
         datefmt='%Y-%m-%dT%H:%M:%S',
     )
 
@@ -55,7 +55,7 @@ def create_file_log_handler(
     logger_file_datetime: datetime|date,
 ) -> Handler:
     file_log_formatter = logging.Formatter(
-        fmt='%(name)s: %(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(process)d | %(message)s',
+        fmt='%(name)s: %(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(message)s', # | %(process)d
         datefmt='%Y-%m-%dT%H:%M:%S',
     )
 
