@@ -1,5 +1,4 @@
 
-#import tracemalloc
 import time
 import requests
 import pandas
@@ -13,7 +12,6 @@ from sqlalchemy import Engine
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-#import psycopg2
 import psycopg
 
 from dataclasses import dataclass
@@ -302,16 +300,10 @@ def update_pp_complete_metadata(
             process_start_timestamp=process_metadata.process_start_timestamp,
             process_complete_timestamp=process_metadata.process_complete_timestamp,
             process_duration=process_metadata.process_duration,
-            #download_start_timestamp=download_start_timestamp,
-            #download_complete_timestamp=download_complete_timestamp,
             download_duration=process_metadata.download_duration,
-            #pandas_read_start_timestamp=pandas_read_start_timestamp,
-            #pandas_read_complete_timestamp=pandas_read_complete_timestamp,
             pandas_read_duration=process_metadata.pandas_read_duration,
             pandas_datetime_convert_duration=process_metadata.pandas_datetime_convert_duration,
             pandas_write_duration=process_metadata.pandas_write_duration,
-            #database_upload_start_timestamp=database_upload_start_timestamp,
-            #database_upload_complete_timestamp=database_upload_complete_timestamp,
             database_upload_duration=process_metadata.database_upload_duration,
         )
         session.add(row)
@@ -331,12 +323,7 @@ def main():
     logger.info(f'connecting to postgres using psycopg3')
     logger.info(f'{postgres_connection_string}')
 
-    #(current, peak) = tracemalloc.get_traced_memory()
-    #current_MB = current / (1024 * 1024)
-    #peak_MB = peak / (1024 * 1024)
-    logger.info(f'process start')
-    #logger.info(f'tracemalloc memory:')
-    #logger.info(f'current: {current_MB:.1f} MB, peak: {peak_MB:.1f} MB')
+    logger.info(f'process start: {datetime.now(timezone.utc)}')
 
     process_metadata = ProcessMetadata(
         process_start_timestamp=None,
@@ -364,7 +351,6 @@ def main():
         download_size_MB,
     ) = download_pp_complete_and_upload_to_database(
         process_metadata=process_metadata,
-        #postgres_engine=postgres_engine,
         postgres_connection_string=postgres_connection_string,
     )
 
@@ -397,16 +383,9 @@ def main():
         download_size_MB=download_size_MB,
     )
 
-    #(current, peak) = tracemalloc.get_traced_memory()
-    #current_MB = current / (1024 * 1024)
-    #peak_MB = peak / (1024 * 1024)
-    logger.info(f'process finished')
-    #logger.info(f'tracemalloc memory:')
-    #logger.info(f'current: {current_MB:.1f} MB, peak: {peak_MB:.1f} MB')
-
+    logger.info(f'process finished: {datetime.now(timezone.utc)}')
+    logger.info(f'duration: {process_duration}')
 
 
 if __name__ == '__main__':
-    #tracemalloc.start()
     main()
-    #tracemalloc.stop()
