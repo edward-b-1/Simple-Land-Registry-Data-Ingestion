@@ -13,6 +13,8 @@ from sqlalchemy import Engine
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+import psycopg2
+
 from dataclasses import dataclass
 
 from lib_land_registry_data.lib_env import EnvironmentVariables
@@ -73,11 +75,54 @@ def download_pp_complete_and_upload_to_database(
         pp_complete_data=pp_complete_data,
     )
 
-    database_upload(
-        process_metadata,
-        postgres_engine=postgres_engine,
-        df=df,
+    environment_variables = EnvironmentVariables()
+
+    #postgres_connection_string = environment_variables.get_postgres_connection_string()
+    #postgres_connection_string = environment_variables.get_postgres_psycopg2_connection_string()
+    #connection = psycopg2.connect(postgres_connection_string)
+    connection = psycopg2.connect(
+        host=environment_variables.postgres_host,
+        user=environment_variables.postgres_user,
+        password=environment_variables.postgres_password,
+        dbname=environment_variables.postgres_database,
+        port=5432,
     )
+    cursor = connection.cursor()
+
+    database_upload_start_timestamp = datetime.now(timezone.utc)
+    process_metadata.database_upload_start_timestamp = database_upload_start_timestamp
+
+    logger.info(f'load to sql database')
+    logger.info(f'load start: {database_upload_start_timestamp}')
+
+    buffer = io.StringIO()
+    pandas_to_csv_start_timestamp = datetime.now(timezone.utc)
+    df.to_csv(buffer, index=False, header=False) # TODO log this time separatly
+    pandas_to_csv_end_timestamp = datetime.now(timezone.utc)
+    pandas_to_csv_duration = pandas_to_csv_end_timestamp - pandas_to_csv_start_timestamp
+    logger.info(f'pandas to_csv duration: {pandas_to_csv_duration}')
+    logger.info(f'datetime now: {datetime.now(timezone.utc)}')
+    buffer.seek(0)
+
+    cursor.copy_expert(
+        'COPY land_registry_simple.pp_complete_data FROM STDIN WITH (FORMAT csv)',
+        buffer,
+    )
+    connection.commit()
+
+    database_upload_complete_timestamp = datetime.now(timezone.utc)
+    database_upload_duration = database_upload_complete_timestamp - database_upload_start_timestamp
+    process_metadata.database_upload_complete_timestamp = database_upload_complete_timestamp
+    process_metadata.database_upload_duration = database_upload_duration
+
+    logger.info(f'load sql database complete')
+    logger.info(f'database upload duration: {database_upload_duration}')
+
+    #database_upload(
+    #    process_metadata,
+    #    postgres_engine=postgres_engine,
+    #    df=df,
+    #)
 
     return (auto_date, download_size_bytes)
 
@@ -273,7 +318,7 @@ def main():
     postgres_connection_string = environment_variables.get_postgres_psycopg2_connection_string()
     postgres_engine = create_engine(
         postgres_connection_string,
-        fast_executemany=True,
+        #fast_executemany=True,
     )
 
     (current, peak) = tracemalloc.get_traced_memory()
