@@ -1,5 +1,5 @@
 
-import tracemalloc
+#import tracemalloc
 import time
 import requests
 import pandas
@@ -13,7 +13,8 @@ from sqlalchemy import Engine
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-import psycopg2
+#import psycopg2
+import psycopg
 
 from dataclasses import dataclass
 
@@ -25,6 +26,8 @@ from lib_land_registry_data.logging import set_logger_process_name
 from lib_land_registry_data.logging import get_logger
 from lib_land_registry_data.logging import create_stdout_log_handler
 from lib_land_registry_data.logging import create_file_log_handler
+
+from lib_land_registry_data.lib_db import PPCompleteMetadata
 
 
 PROCESS_NAME = 'simple_land_registry_data_ingestion'
@@ -54,6 +57,12 @@ class ProcessMetadata():
     pandas_read_start_timestamp: datetime|None
     pandas_read_complete_timestamp: datetime|None
     pandas_read_duration: timedelta|None
+    pandas_datetime_convert_start_timestamp: datetime|None
+    pandas_datetime_convert_complete_timestamp: datetime|None
+    pandas_datetime_convert_duration: timedelta|None
+    pandas_write_start_timestamp: datetime|None
+    pandas_write_complete_timestamp: datetime|None
+    pandas_write_duration: timedelta|None
     database_upload_start_timestamp: datetime|None
     database_upload_complete_timestamp: datetime|None
     database_upload_duration: timedelta|None
@@ -61,7 +70,7 @@ class ProcessMetadata():
 
 def download_pp_complete_and_upload_to_database(
     process_metadata: ProcessMetadata,
-    postgres_engine: Engine,
+    postgres_connection_string: str,
 ) -> tuple[date, int]:
 
     pp_complete_data = download_data_to_memory_retry_wrapper(
@@ -69,62 +78,25 @@ def download_pp_complete_and_upload_to_database(
     )
 
     download_size_bytes = len(pp_complete_data)
+    download_size_MB = int(download_size_bytes / (1024 * 1024))
 
     (df, auto_date) = pandas_read(
         process_metadata=process_metadata,
         pp_complete_data=pp_complete_data,
     )
 
-    environment_variables = EnvironmentVariables()
-
-    #postgres_connection_string = environment_variables.get_postgres_connection_string()
-    #postgres_connection_string = environment_variables.get_postgres_psycopg2_connection_string()
-    #connection = psycopg2.connect(postgres_connection_string)
-    connection = psycopg2.connect(
-        host=environment_variables.postgres_host,
-        user=environment_variables.postgres_user,
-        password=environment_variables.postgres_password,
-        dbname=environment_variables.postgres_database,
-        port=5432,
+    buffer = pandas_write_to_buffer(
+        process_metadata=process_metadata,
+        df=df,
     )
-    cursor = connection.cursor()
 
-    database_upload_start_timestamp = datetime.now(timezone.utc)
-    process_metadata.database_upload_start_timestamp = database_upload_start_timestamp
-
-    logger.info(f'load to sql database')
-    logger.info(f'load start: {database_upload_start_timestamp}')
-
-    buffer = io.StringIO()
-    pandas_to_csv_start_timestamp = datetime.now(timezone.utc)
-    df.to_csv(buffer, index=False, header=False) # TODO log this time separatly
-    pandas_to_csv_end_timestamp = datetime.now(timezone.utc)
-    pandas_to_csv_duration = pandas_to_csv_end_timestamp - pandas_to_csv_start_timestamp
-    logger.info(f'pandas to_csv duration: {pandas_to_csv_duration}')
-    logger.info(f'datetime now: {datetime.now(timezone.utc)}')
-    buffer.seek(0)
-
-    cursor.copy_expert(
-        'COPY land_registry_simple.pp_complete_data FROM STDIN WITH (FORMAT csv)',
-        buffer,
+    database_upload(
+        process_metadata,
+        postgres_connection_string=postgres_connection_string,
+        buffer=buffer,
     )
-    connection.commit()
 
-    database_upload_complete_timestamp = datetime.now(timezone.utc)
-    database_upload_duration = database_upload_complete_timestamp - database_upload_start_timestamp
-    process_metadata.database_upload_complete_timestamp = database_upload_complete_timestamp
-    process_metadata.database_upload_duration = database_upload_duration
-
-    logger.info(f'load sql database complete')
-    logger.info(f'database upload duration: {database_upload_duration}')
-
-    #database_upload(
-    #    process_metadata,
-    #    postgres_engine=postgres_engine,
-    #    df=df,
-    #)
-
-    return (auto_date, download_size_bytes)
+    return (auto_date, download_size_MB)
 
 
 def download_data_to_memory_retry_wrapper(
@@ -216,7 +188,10 @@ def pandas_read(
     df = pandas.read_csv(
         io.BytesIO(pp_complete_data),
         header=None,
+        dtype=str,
+        keep_default_na=False,
     )
+
     pandas_read_complete_timestamp = datetime.now(timezone.utc)
     pandas_read_duration = pandas_read_complete_timestamp - pandas_read_start_timestamp
     process_metadata.pandas_read_complete_timestamp = pandas_read_complete_timestamp
@@ -225,15 +200,26 @@ def pandas_read(
     logger.info(f'done reading data')
     logger.info(f'pandas read duration: {pandas_read_duration}')
 
-    logger.info(f'get column names')
-    df.columns = df_pp_complete_columns
+    pandas_datetime_convert_start_timestamp = datetime.now(timezone.utc)
+    process_metadata.pandas_datetime_convert_start_timestamp = pandas_datetime_convert_start_timestamp
 
     logger.info(f'convert column transaction_date to datetime')
+    logger.info(f'datetime convert start: {pandas_datetime_convert_start_timestamp}')
+
+    df.columns = df_pp_complete_columns
     df['transaction_date'] = pandas.to_datetime(
         arg=df['transaction_date'],
         utc=True,
         format='%Y-%m-%d %H:%M',
     )
+
+    pandas_datetime_convert_complete_timestamp = datetime.now(timezone.utc)
+    pandas_datetime_convert_duration = pandas_datetime_convert_complete_timestamp - pandas_datetime_convert_start_timestamp
+    process_metadata.pandas_datetime_convert_complete_timestamp = pandas_datetime_convert_complete_timestamp
+    process_metadata.pandas_datetime_convert_duration = pandas_datetime_convert_duration
+
+    logger.info(f'done converting datetimes')
+    logger.info(f'datetime convert duration: {pandas_datetime_convert_duration}')
 
     logger.info(f'get auto_date')
     auto_date = df['transaction_date'].max()
@@ -249,10 +235,35 @@ def pandas_read(
     return (df, auto_date)
 
 
+def pandas_write_to_buffer(
+    process_metadata: ProcessMetadata,
+    df: pandas.DataFrame,
+) -> io.StringIO:
+
+    pandas_write_start_timestamp = datetime.now(timezone.utc)
+    process_metadata.pandas_write_start_timestamp = pandas_write_start_timestamp
+
+    logger.info(f'pandas write start: {pandas_write_start_timestamp}')
+
+    buffer = io.StringIO()
+    df.to_csv(buffer, index=False, header=False)
+    buffer.seek(0)
+
+    pandas_write_complete_timestamp = datetime.now(timezone.utc)
+    pandas_write_duration = pandas_write_complete_timestamp - pandas_write_start_timestamp
+    process_metadata.pandas_write_complete_timestamp = pandas_write_complete_timestamp
+    process_metadata.pandas_write_duration = pandas_write_duration
+
+    logger.info(f'pandas write duration: {pandas_write_duration}')
+    logger.info(f'datetime now: {datetime.now(timezone.utc)}')
+
+    return buffer
+
+
 def database_upload(
     process_metadata: ProcessMetadata,
-    postgres_engine: Engine,
-    df: pandas.DataFrame,
+    postgres_connection_string: str,
+    buffer: io.StringIO,
 ) -> None:
 
     database_upload_start_timestamp = datetime.now(timezone.utc)
@@ -261,15 +272,13 @@ def database_upload(
     logger.info(f'load to sql database')
     logger.info(f'load start: {database_upload_start_timestamp}')
 
-    df.to_sql(
-        name='pp_complete_data',
-        schema='land_registry_simple',
-        con=postgres_engine,
-        if_exists='replace',
-        index=False,
-        #chunksize=100000,
-        method='multi',
-    )
+    columns = '(transaction_unique_id, price, transaction_date, postcode, property_type, new_tag, lease, primary_address_object_name, secondary_address_object_name, street, locality, town_city, district, county, ppd_cat, record_op)'
+    with psycopg.connect(postgres_connection_string) as connection:
+        with connection.cursor() as cursor:
+            with cursor.copy(f'COPY land_registry_simple.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL \'\\N\')') as copy:
+                copy.write(buffer.read())
+        connection.commit()
+
     database_upload_complete_timestamp = datetime.now(timezone.utc)
     database_upload_duration = database_upload_complete_timestamp - database_upload_start_timestamp
     process_metadata.database_upload_complete_timestamp = database_upload_complete_timestamp
@@ -283,25 +292,27 @@ def update_pp_complete_metadata(
     process_metadata: ProcessMetadata,
     postgres_engine: Engine,
     auto_date: date,
-    download_size_bytes: int,
+    download_size_MB: int,
 ) -> None:
 
     with Session(postgres_engine) as session:
         row = PPCompleteMetadata(
             auto_date=auto_date,
-            download_size_bytes=download_size_bytes,
-            process_start_timestamp=process_start_timestamp,
-            process_complete_timestamp=process_end_timestamp,
-            process_duration=process_duration,
-            download_start_timestamp=download_start_timestamp,
-            download_complete_timestamp=download_complete_timestamp,
-            download_duration=download_duration,
-            pandas_read_start_timestamp=pandas_read_start_timestamp,
-            pandas_read_complete_timestamp=pandas_read_complete_timestamp,
-            pandas_read_duration=pandas_read_duration,
-            database_upload_start_timestamp=database_upload_start_timestamp,
-            database_upload_complete_timestamp=database_upload_complete_timestamp,
-            database_upload_duration=database_upload_duration,
+            download_size_MB=int(download_size_MB/1024/1024),
+            process_start_timestamp=process_metadata.process_start_timestamp,
+            process_complete_timestamp=process_metadata.process_complete_timestamp,
+            process_duration=process_metadata.process_duration,
+            #download_start_timestamp=download_start_timestamp,
+            #download_complete_timestamp=download_complete_timestamp,
+            download_duration=process_metadata.download_duration,
+            #pandas_read_start_timestamp=pandas_read_start_timestamp,
+            #pandas_read_complete_timestamp=pandas_read_complete_timestamp,
+            pandas_read_duration=process_metadata.pandas_read_duration,
+            pandas_datetime_convert_duration=process_metadata.pandas_datetime_convert_duration,
+            pandas_write_duration=process_metadata.pandas_write_duration,
+            #database_upload_start_timestamp=database_upload_start_timestamp,
+            #database_upload_complete_timestamp=database_upload_complete_timestamp,
+            database_upload_duration=process_metadata.database_upload_duration,
         )
         session.add(row)
         session.commit()
@@ -309,24 +320,23 @@ def update_pp_complete_metadata(
 
 def main():
 
+    process_start_timestamp = datetime.now(timezone.utc)
+
     logger.info(f'{PROCESS_NAME} start')
 
     environment_variables = EnvironmentVariables()
 
-    logger.info(f'create database engine: postgres_host={environment_variables.get_postgres_host()}')
-    postgres_connection_string = environment_variables.get_postgres_connection_string()
-    postgres_connection_string = environment_variables.get_postgres_psycopg2_connection_string()
-    postgres_engine = create_engine(
-        postgres_connection_string,
-        #fast_executemany=True,
-    )
+    logger.info(f'postgres_host: {environment_variables.get_postgres_host()}')
+    postgres_connection_string = environment_variables.get_psycopg3_postgres_connection_string_as_key_value_pairs()
+    logger.info(f'connecting to postgres using psycopg3')
+    logger.info(f'{postgres_connection_string}')
 
-    (current, peak) = tracemalloc.get_traced_memory()
-    current_MB = current / (1024 * 1024)
-    peak_MB = peak / (1024 * 1024)
+    #(current, peak) = tracemalloc.get_traced_memory()
+    #current_MB = current / (1024 * 1024)
+    #peak_MB = peak / (1024 * 1024)
     logger.info(f'process start')
-    logger.info(f'tracemalloc memory:')
-    logger.info(f'current: {current_MB:.1f} MB, peak: {peak_MB:.1f} MB')
+    #logger.info(f'tracemalloc memory:')
+    #logger.info(f'current: {current_MB:.1f} MB, peak: {peak_MB:.1f} MB')
 
     process_metadata = ProcessMetadata(
         process_start_timestamp=None,
@@ -338,6 +348,12 @@ def main():
         pandas_read_start_timestamp=None,
         pandas_read_complete_timestamp=None,
         pandas_read_duration=None,
+        pandas_datetime_convert_start_timestamp=None,
+        pandas_datetime_convert_complete_timestamp=None,
+        pandas_datetime_convert_duration=None,
+        pandas_write_start_timestamp=None,
+        pandas_write_complete_timestamp=None,
+        pandas_write_duration=None,
         database_upload_start_timestamp=None,
         database_upload_complete_timestamp=None,
         database_upload_duration=None
@@ -345,28 +361,52 @@ def main():
 
     (
         auto_date,
-        download_size_bytes,
+        download_size_MB,
     ) = download_pp_complete_and_upload_to_database(
         process_metadata=process_metadata,
-        postgres_engine=postgres_engine,
+        #postgres_engine=postgres_engine,
+        postgres_connection_string=postgres_connection_string,
     )
+
+    logger.info(f'create database engine: postgres_host={environment_variables.get_postgres_host()}')
+    postgres_connection_string = environment_variables.get_postgres_psycopg3_connection_string()
+    logger.info(f'connecting to postgres using sqlalchemy')
+    logger.info(f'{postgres_connection_string}')
+    postgres_engine = create_engine(
+        postgres_connection_string,
+        #fast_executemany=True,
+        #executmany_mode='batch',
+    )
+
+    logger.info(f'postgres engine:')
+    logger.info(f'dialect: {postgres_engine.dialect}')
+    logger.info(f'dialect api: {postgres_engine.dialect.dbapi}')
+    logger.info(f'dialect api __name__: {postgres_engine.dialect.dbapi.__name__}')
+
+    process_complete_timestamp = datetime.now(timezone.utc)
+    process_duration = process_complete_timestamp - process_start_timestamp
+
+    process_metadata.process_start_timestamp = process_start_timestamp
+    process_metadata.process_complete_timestamp = process_complete_timestamp
+    process_metadata.process_duration = process_duration
 
     update_pp_complete_metadata(
         process_metadata=process_metadata,
         postgres_engine=postgres_engine,
         auto_date=auto_date,
-        download_size_bytes=download_size_bytes,
+        download_size_MB=download_size_MB,
     )
 
-    (current, peak) = tracemalloc.get_traced_memory()
-    current_MB = current / (1024 * 1024)
-    peak_MB = peak / (1024 * 1024)
+    #(current, peak) = tracemalloc.get_traced_memory()
+    #current_MB = current / (1024 * 1024)
+    #peak_MB = peak / (1024 * 1024)
     logger.info(f'process finished')
-    logger.info(f'tracemalloc memory:')
-    logger.info(f'current: {current_MB:.1f} MB, peak: {peak_MB:.1f} MB')
+    #logger.info(f'tracemalloc memory:')
+    #logger.info(f'current: {current_MB:.1f} MB, peak: {peak_MB:.1f} MB')
+
 
 
 if __name__ == '__main__':
-    tracemalloc.start()
+    #tracemalloc.start()
     main()
-    tracemalloc.stop()
+    #tracemalloc.stop()
