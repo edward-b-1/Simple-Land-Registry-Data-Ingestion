@@ -1,4 +1,6 @@
 
+import os
+import tempfile
 import time
 import requests
 import pandas
@@ -71,36 +73,27 @@ def download_pp_complete_and_upload_to_database(
     postgres_connection_string: str,
 ) -> tuple[date, int]:
 
-    pp_complete_data = download_data_to_memory_retry_wrapper(
+    temp_file_path = download_data_to_disk_retry_wrapper(
         process_metadata=process_metadata,
     )
+    download_size_MB = int(os.path.getsize(temp_file_path) / (1024 * 1024))
 
-    download_size_bytes = len(pp_complete_data)
-    download_size_MB = int(download_size_bytes / (1024 * 1024))
-
-    (df, auto_date) = pandas_read(
-        process_metadata=process_metadata,
-        pp_complete_data=pp_complete_data,
-    )
-
-    buffer = pandas_write_to_buffer(
-        process_metadata=process_metadata,
-        df=df,
-    )
-
-    database_upload(
-        process_metadata,
-        postgres_connection_string=postgres_connection_string,
-        buffer=buffer,
-    )
+    try:
+        auto_date = pandas_read_and_database_upload(
+            process_metadata=process_metadata,
+            postgres_connection_string=postgres_connection_string,
+            temp_file_path=temp_file_path,
+        )
+    finally:
+        os.unlink(temp_file_path)
 
     return (auto_date, download_size_MB)
 
 
-def download_data_to_memory_retry_wrapper(
+def download_data_to_disk_retry_wrapper(
     process_metadata: ProcessMetadata,
     max_retries=3,
-) -> bytes:
+) -> str:
 
     url = 'http://prod.publicdata.landregistry.gov.uk.s3-website-eu-west-1.amazonaws.com/pp-complete.txt'
 
@@ -109,12 +102,12 @@ def download_data_to_memory_retry_wrapper(
         logger.info(f'try to run download')
 
         try:
-            logger.info(f'download data to memory')
-            pp_complete_data = download_data_to_memory(
+            logger.info(f'download data to disk')
+            temp_file_path = download_data_to_disk(
                 process_metadata=process_metadata,
                 url=url,
             )
-            logger.info(f'download data to memory complete')
+            logger.info(f'download data to disk complete')
             break
 
         except Exception as error:
@@ -136,91 +129,136 @@ def download_data_to_memory_retry_wrapper(
                 time.sleep(time_10_seconds)
                 continue
 
-    return pp_complete_data
+    return temp_file_path
 
 
-def download_data_to_memory(
+def download_data_to_disk(
     process_metadata: ProcessMetadata,
     url: str,
-) -> bytes:
+) -> str:
 
     download_start_timestamp = datetime.now(timezone.utc)
-    process_metadata.download_start_timestamp = download_start_timestamp
 
     logger.info(f'downloading from {url}')
     logger.info(f'download starting: {download_start_timestamp}')
 
-    response = requests.get(url, allow_redirects=True)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.txt')
+    tmp.close()
+
+    with requests.get(url, allow_redirects=True, stream=True) as response:
+        logger.info(f'status_code={response.status_code}')
+
+        if response.status_code != 200:
+            download_complete_timestamp = datetime.now(timezone.utc)
+            download_duration = download_complete_timestamp - download_start_timestamp
+            logger.error(f'download failure: {download_duration}')
+            os.unlink(tmp.name)
+            raise RuntimeError(f'request failure {response.status_code}')
+
+        with open(tmp.name, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8*1024*1024):
+                f.write(chunk)
 
     download_complete_timestamp = datetime.now(timezone.utc)
     download_duration = download_complete_timestamp - download_start_timestamp
-    process_metadata.download_complete_timestamp = download_complete_timestamp
     process_metadata.download_duration = download_duration
 
-    logger.info(f'status_code={response.status_code}')
-    pp_complete_data = response.content
-    pp_complete_data_MB = len(pp_complete_data) / (1024 * 1024)
+    download_size_MB = os.path.getsize(tmp.name) / (1024 * 1024)
+    logger.info(f'download complete: {download_complete_timestamp}')
+    logger.info(f'download duration: {download_duration}')
+    logger.info(f'download size: {download_size_MB:.1f} MB')
 
-    if response.status_code == 200:
-        logger.info(f'download complete: {download_complete_timestamp}')
-        logger.info(f'download duration: {download_duration}')
-        logger.info(f'download size: {pp_complete_data_MB:.1f} MB')
-    else:
-        logger.error(f'download failure: {download_duration}')
-        raise RuntimeError(f'request failure {response.status_code}')
-
-    return pp_complete_data
+    return tmp.name
 
 
-def pandas_read(
+def pandas_read_and_database_upload(
     process_metadata: ProcessMetadata,
-    pp_complete_data: bytes,
-) -> tuple[pandas.DataFrame, date]:
+    postgres_connection_string: str,
+    temp_file_path: str,
+) -> date:
 
-    pandas_read_start_timestamp = datetime.now(timezone.utc)
-    process_metadata.pandas_read_start_timestamp = pandas_read_start_timestamp
+    chunk_size = 50000
 
-    logger.info(f'load pandas DataFrame')
-    logger.info(f'pandas read start: {pandas_read_start_timestamp}')
+    logger.info(f'load pandas DataFrame in chunks (chunk size {chunk_size}) and upload to database')
 
-    df = pandas.read_csv(
-        io.BytesIO(pp_complete_data),
-        header=None,
-        dtype=str,
-        keep_default_na=False,
-    )
+    auto_date = None
 
-    pandas_read_complete_timestamp = datetime.now(timezone.utc)
-    pandas_read_duration = pandas_read_complete_timestamp - pandas_read_start_timestamp
-    process_metadata.pandas_read_complete_timestamp = pandas_read_complete_timestamp
-    process_metadata.pandas_read_duration = pandas_read_duration
+    pandas_read_duration = timedelta(0)
+    pandas_datetime_convert_duration = timedelta(0)
+    pandas_write_duration = timedelta(0)
+    database_upload_duration = timedelta(0)
 
-    logger.info(f'done reading data')
+    sub_process_start_timestamp = datetime.now(timezone.utc)
+    logger.info(f'start timestamp: {sub_process_start_timestamp}')
+
+    with psycopg.connect(postgres_connection_string) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("TRUNCATE TABLE land_registry_simple.pp_complete_data")
+
+            columns = '(transaction_unique_id, price, transaction_date, postcode, property_type, new_tag, lease, primary_address_object_name, secondary_address_object_name, street, locality, town_city, district, county, ppd_cat, record_op)'
+
+            with cursor.copy(f"COPY land_registry_simple.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL '\\N')") as copy:
+
+                pandas_read_start_timestamp = datetime.now(timezone.utc)
+
+                for chunk in pandas.read_csv(
+                    temp_file_path,
+                    header=None,
+                    dtype=str,
+                    keep_default_na=False,
+                    chunksize=chunk_size,
+                ):
+                    pandas_read_complete_timestamp = datetime.now(timezone.utc)
+                    pandas_read_duration += pandas_read_complete_timestamp - pandas_read_start_timestamp
+                    process_metadata.pandas_read_duration = pandas_read_duration
+
+                    pandas_datetime_convert_start_timestamp = datetime.now(timezone.utc)
+
+                    chunk.columns = df_pp_complete_columns
+                    chunk['transaction_date'] = pandas.to_datetime(
+                        arg=chunk['transaction_date'],
+                        utc=True,
+                        format='%Y-%m-%d %H:%M',
+                    )
+
+                    pandas_datetime_convert_complete_timestamp = datetime.now(timezone.utc)
+                    pandas_datetime_convert_duration += pandas_datetime_convert_complete_timestamp - pandas_datetime_convert_start_timestamp
+                    process_metadata.pandas_datetime_convert_duration = pandas_datetime_convert_duration
+
+                    auto_date_chunk = chunk['transaction_date'].max()
+                    if auto_date is None or auto_date_chunk > auto_date:
+                        auto_date = auto_date_chunk
+
+                    pandas_write_start_timestamp = datetime.now(timezone.utc)
+
+                    buffer = io.StringIO()
+                    chunk.to_csv(buffer, index=False, header=False)
+
+                    pandas_write_complete_timestamp = datetime.now(timezone.utc)
+                    pandas_write_duration += pandas_write_complete_timestamp - pandas_write_start_timestamp
+                    process_metadata.pandas_write_duration = pandas_write_duration
+
+                    database_upload_start_timestamp = datetime.now(timezone.utc)
+
+                    copy.write(buffer.getvalue())
+
+                    database_upload_complete_timestamp = datetime.now(timezone.utc)
+                    database_upload_duration += database_upload_complete_timestamp - database_upload_start_timestamp
+                    process_metadata.database_upload_duration = database_upload_duration
+
+                    pandas_read_start_timestamp = datetime.now(timezone.utc)
+
+        connection.commit()
+
+    sub_process_end_timestamp = datetime.now(timezone.utc)
+
+    logger.info(f'done reading pandas DataFrame and database upload')
+    logger.info(f'complete timestamp: {sub_process_end_timestamp}')
     logger.info(f'pandas read duration: {pandas_read_duration}')
-
-    pandas_datetime_convert_start_timestamp = datetime.now(timezone.utc)
-    process_metadata.pandas_datetime_convert_start_timestamp = pandas_datetime_convert_start_timestamp
-
-    logger.info(f'convert column transaction_date to datetime')
-    logger.info(f'datetime convert start: {pandas_datetime_convert_start_timestamp}')
-
-    df.columns = df_pp_complete_columns
-    df['transaction_date'] = pandas.to_datetime(
-        arg=df['transaction_date'],
-        utc=True,
-        format='%Y-%m-%d %H:%M',
-    )
-
-    pandas_datetime_convert_complete_timestamp = datetime.now(timezone.utc)
-    pandas_datetime_convert_duration = pandas_datetime_convert_complete_timestamp - pandas_datetime_convert_start_timestamp
-    process_metadata.pandas_datetime_convert_complete_timestamp = pandas_datetime_convert_complete_timestamp
-    process_metadata.pandas_datetime_convert_duration = pandas_datetime_convert_duration
-
-    logger.info(f'done converting datetimes')
     logger.info(f'datetime convert duration: {pandas_datetime_convert_duration}')
+    logger.info(f'pandas write duration: {pandas_write_duration}')
+    logger.info(f'database upload duration: {database_upload_duration}')
 
-    logger.info(f'get auto_date')
-    auto_date = df['transaction_date'].max()
     auto_date = (
         date(
             year=auto_date.year,
@@ -230,62 +268,7 @@ def pandas_read(
     )
     logger.info(f'auto_date={auto_date}')
 
-    return (df, auto_date)
-
-
-def pandas_write_to_buffer(
-    process_metadata: ProcessMetadata,
-    df: pandas.DataFrame,
-) -> io.StringIO:
-
-    pandas_write_start_timestamp = datetime.now(timezone.utc)
-    process_metadata.pandas_write_start_timestamp = pandas_write_start_timestamp
-
-    logger.info(f'pandas write start: {pandas_write_start_timestamp}')
-
-    buffer = io.StringIO()
-    df.to_csv(buffer, index=False, header=False)
-    buffer.seek(0)
-
-    pandas_write_complete_timestamp = datetime.now(timezone.utc)
-    pandas_write_duration = pandas_write_complete_timestamp - pandas_write_start_timestamp
-    process_metadata.pandas_write_complete_timestamp = pandas_write_complete_timestamp
-    process_metadata.pandas_write_duration = pandas_write_duration
-
-    logger.info(f'pandas write duration: {pandas_write_duration}')
-    logger.info(f'datetime now: {datetime.now(timezone.utc)}')
-
-    return buffer
-
-
-def database_upload(
-    process_metadata: ProcessMetadata,
-    postgres_connection_string: str,
-    buffer: io.StringIO,
-) -> None:
-
-    database_upload_start_timestamp = datetime.now(timezone.utc)
-    process_metadata.database_upload_start_timestamp = database_upload_start_timestamp
-
-    logger.info(f'load to sql database')
-    logger.info(f'load start: {database_upload_start_timestamp}')
-
-    columns = '(transaction_unique_id, price, transaction_date, postcode, property_type, new_tag, lease, primary_address_object_name, secondary_address_object_name, street, locality, town_city, district, county, ppd_cat, record_op)'
-    with psycopg.connect(postgres_connection_string) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute("TRUNCATE TABLE land_registry_simple.pp_complete_data")
-
-            with cursor.copy(f'COPY land_registry_simple.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL \'\\N\')') as copy:
-                copy.write(buffer.read())
-        connection.commit()
-
-    database_upload_complete_timestamp = datetime.now(timezone.utc)
-    database_upload_duration = database_upload_complete_timestamp - database_upload_start_timestamp
-    process_metadata.database_upload_complete_timestamp = database_upload_complete_timestamp
-    process_metadata.database_upload_duration = database_upload_duration
-
-    logger.info(f'load sql database complete')
-    logger.info(f'database upload duration: {database_upload_duration}')
+    return auto_date
 
 
 def update_pp_complete_metadata(
@@ -298,7 +281,7 @@ def update_pp_complete_metadata(
     with Session(postgres_engine) as session:
         row = PPCompleteMetadata(
             auto_date=auto_date,
-            download_size_MB=int(download_size_MB/1024/1024),
+            download_size_MB=int(download_size_MB),
             process_start_timestamp=process_metadata.process_start_timestamp,
             process_complete_timestamp=process_metadata.process_complete_timestamp,
             process_duration=process_metadata.process_duration,
