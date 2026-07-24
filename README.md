@@ -1,14 +1,55 @@
 # Simple-Land-Registry-Data-Ingestion
 Simple version of Land Registry Data Ingestion
 
-# Instructions
+Downloads the UK Land Registry Price Paid dataset (`pp-complete.txt`, ~5 GB)
+and syncs it into a Postgres database.
+
+# Running with Docker (recommended)
+
+Postgres runs in a local Docker container with a persistent named volume.
+The ingestion process runs as a one-shot container.
 
 ```shell
-pip3 -m venv venv
-source ./venv/bin/activate
-pip3 install sqlalchemy typeguard psycopg2-binary requests pandas
-direnv allow
-python3 create_table_pp_complete_data.py
-python3 create_table_pp_complete_metdata.py
-python3 main.py
+# start the database (stays running in the background)
+docker compose up -d postgres
+
+# run the data sync (creates schema/tables if needed, then downloads and loads the data)
+docker compose run --rm ingestion
+```
+
+Configuration lives in `docker-compose.yml`. Defaults can be overridden via a
+local `.env` file (gitignored), e.g. if host port 5432 is already in use:
+
+```
+POSTGRES_HOST_PORT=5433
+POSTGRES_PASSWORD=changeme
+```
+
+Log files are written to `./logs/` on the host (the ingestion process also
+logs to stdout, so `docker logs` works too).
+
+To connect to the dockerized database from the host:
+
+```shell
+psql -h localhost -p 5432 -U postgres postgres
+```
+
+The database data lives in `./postgres_data/` (gitignored), so it survives
+`docker system prune` and can be migrated by copying the project directory.
+
+To stop the database:
+
+```shell
+docker compose down
+```
+
+# Running natively (without Docker)
+
+The project is managed with [uv](https://docs.astral.sh/uv/).
+
+```shell
+uv sync
+direnv allow   # exports POSTGRES_HOST / POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DATABASE from .envrc
+uv run python init_db.py
+uv run python main.py
 ```

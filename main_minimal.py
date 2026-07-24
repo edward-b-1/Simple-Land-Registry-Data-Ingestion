@@ -50,7 +50,7 @@ print(f'write to StringIO complete: {datetime_now()}')
 columns = '(transaction_unique_id, price, transaction_date, postcode, property_type, new_tag, lease, primary_address_object_name, secondary_address_object_name, street, locality, town_city, district, county, ppd_cat, record_op)'
 with psycopg.connect(postgres_connection_string) as conn:
     with conn.cursor() as cur:
-        with cur.copy(f'COPY land_registry_simple.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL \'\\N\')') as copy:
+        with cur.copy(f'COPY land_registry.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL \'\\N\')') as copy:
             copy.write(file.read())
     conn.commit()
 print(f'upload to database complete: {datetime_now()}')

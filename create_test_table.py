@@ -14,7 +14,7 @@ def main(recreate: bool):
     engine = create_engine(url)
 
     with engine.connect() as connection:
-        connection.execute(text('create schema if not exists land_registry_simple'))
+        connection.execute(text('create schema if not exists land_registry'))
         connection.commit()
 
     print(f'list of tables')
@@ -22,9 +22,9 @@ def main(recreate: bool):
         print(table)
 
     if recreate:
-        LandRegistryBase.metadata.tables['land_registry_simple.test_table'].drop(engine)
+        LandRegistryBase.metadata.tables['land_registry.test_table'].drop(engine)
 
-    LandRegistryBase.metadata.tables['land_registry_simple.test_table'].create(engine)
+    LandRegistryBase.metadata.tables['land_registry.test_table'].create(engine)
 
 
 if __name__ == '__main__':

@@ -1,12 +1,28 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy import text
+
 from lib_land_registry_data.lib_db import LandRegistryBase
 
 from lib_land_registry_data.lib_env import EnvironmentVariables
 
+from lib_land_registry_data.logging import set_logger_process_name
+from lib_land_registry_data.logging import get_logger
+from lib_land_registry_data.logging import create_stdout_log_handler
 
-def main(recreate: bool):
+
+PROCESS_NAME = 'init_db'
+
+set_logger_process_name(
+    process_name=PROCESS_NAME,
+)
+
+logger = get_logger()
+stdout_log_handler = create_stdout_log_handler()
+logger.addHandler(stdout_log_handler)
+
+
+def main():
 
     environment_variables = EnvironmentVariables()
 
@@ -17,15 +33,13 @@ def main(recreate: bool):
         connection.execute(text('create schema if not exists land_registry'))
         connection.commit()
 
-    print(f'list of tables')
+    logger.info(f'list of tables')
     for table in LandRegistryBase.metadata.tables.keys():
-        print(table)
+        logger.info(f'{table}')
 
-    if recreate:
-        LandRegistryBase.metadata.tables['land_registry.pp_complete_metadata'].drop(engine)
-
-    LandRegistryBase.metadata.tables['land_registry.pp_complete_metadata'].create(engine)
+    LandRegistryBase.metadata.create_all(engine, checkfirst=True)
+    logger.info(f'tables created (if they did not already exist)')
 
 
 if __name__ == '__main__':
-    main(recreate=False)
+    main()

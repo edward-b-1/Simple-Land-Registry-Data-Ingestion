@@ -1,0 +1,11 @@
+.git/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.log
+logs/
+postgres_data/
+.envrc
+.env
+test_file.csv

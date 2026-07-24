@@ -13,7 +13,7 @@ from typing import Optional
 
 
 class LandRegistryBase(DeclarativeBase):
-    __table_args__ = {'schema': 'land_registry_simple'}
+    __table_args__ = {'schema': 'land_registry'}
 
 
 class PPCompleteData(LandRegistryBase):
@@ -56,12 +56,3 @@ class PPCompleteMetadata(LandRegistryBase):
     pandas_datetime_convert_duration: Mapped[timedelta]
     pandas_write_duration: Mapped[timedelta]
     database_upload_duration: Mapped[timedelta]
-
-
-class TestTable(LandRegistryBase):
-
-    __tablename__ = 'test_table'
-
-    test_table_id: Mapped[int] = mapped_column(primary_key=True)
-    string_column: Mapped[str]
-    int_column: Mapped[int]

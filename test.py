@@ -11,6 +11,6 @@ file.seek(0)
 columns = '(string_column, int_column)'
 with psycopg.connect(postgres_connection_string) as conn:
     with conn.cursor() as cur:
-        with cur.copy(f'COPY land_registry_simple.test_table {columns} FROM STDIN WITH (FORMAT csv)') as copy:
+        with cur.copy(f'COPY land_registry.test_table {columns} FROM STDIN WITH (FORMAT csv)') as copy:
             copy.write(file.read())
     conn.commit()

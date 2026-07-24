@@ -135,7 +135,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .envrc
 .venv
 env/
@@ -205,3 +204,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# runtime logs directory (docker bind mount)
+logs/
+
+# postgres data directory (docker bind mount)
+postgres_data/

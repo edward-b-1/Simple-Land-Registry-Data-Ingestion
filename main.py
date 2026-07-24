@@ -193,11 +193,11 @@ def pandas_read_and_database_upload(
 
     with psycopg.connect(postgres_connection_string) as connection:
         with connection.cursor() as cursor:
-            cursor.execute("TRUNCATE TABLE land_registry_simple.pp_complete_data")
+            cursor.execute("TRUNCATE TABLE land_registry.pp_complete_data")
 
             columns = '(transaction_unique_id, price, transaction_date, postcode, property_type, new_tag, lease, primary_address_object_name, secondary_address_object_name, street, locality, town_city, district, county, ppd_cat, record_op)'
 
-            with cursor.copy(f"COPY land_registry_simple.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL '\\N')") as copy:
+            with cursor.copy(f"COPY land_registry.pp_complete_data {columns} FROM STDIN WITH (FORMAT csv, NULL '\\N')") as copy:
 
                 pandas_read_start_timestamp = datetime.now(timezone.utc)
 
