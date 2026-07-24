@@ -34,8 +34,17 @@ To connect to the dockerized database from the host:
 psql -h localhost -p 5432 -U postgres postgres
 ```
 
+To drop and recreate tables (e.g. after changing a model in `lib_db.py`):
+
+```shell
+docker compose run --rm ingestion python /app/init_db.py --recreate                   # all tables
+docker compose run --rm ingestion python /app/init_db.py --recreate pp_complete_data  # named tables only
+```
+
 The database data lives in `./postgres_data/` (gitignored), so it survives
 `docker system prune` and can be migrated by copying the project directory.
+Deleting that directory and re-running the steps above rebuilds the whole
+database from scratch.
 
 To stop the database:
 
