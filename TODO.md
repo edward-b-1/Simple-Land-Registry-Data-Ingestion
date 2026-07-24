@@ -10,6 +10,4 @@
   decorators in `lib_land_registry_data/logging.py`)
 - Consider replacing the `create_table_*.py` scripts with `init_db.py` (idempotent,
   used by the docker ingestion container)
-- Remove the old docker named volume once migrated to the `./postgres_data/` bind
-  mount: `docker volume rm simple-land-registry-data-ingestion_postgres_data`
 - `lib_land_registry_data/lib_datetime_not_used.py` is unused (per its name)
