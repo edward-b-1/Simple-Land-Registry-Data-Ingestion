@@ -8,7 +8,6 @@ import logging
 from logging import Logger
 from logging import Handler
 
-from typeguard import typechecked
 
 from dataclasses import dataclass
 
@@ -24,7 +23,6 @@ logger = LoggerWrapper(
 )
 
 
-@typechecked
 def set_logger_process_name(process_name: str) -> None:
     global logger_process_name
     global logger
@@ -35,7 +33,6 @@ def set_logger_process_name(process_name: str) -> None:
     _initialize_logger()
 
 
-@typechecked
 def create_stdout_log_handler() -> Handler:
     stdout_log_formatter = logging.Formatter(
         fmt='%(name)s: %(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(message)s', # | %(process)d
@@ -49,7 +46,6 @@ def create_stdout_log_handler() -> Handler:
     return stdout_log_handler
 
 
-@typechecked
 def create_file_log_handler(
     logger_process_name: str,
     logger_file_datetime: datetime|date,
@@ -68,7 +64,6 @@ def create_file_log_handler(
     return file_log_handler
 
 
-@typechecked
 def get_logger() -> Logger:
     global logger
 
@@ -81,7 +76,6 @@ def get_logger() -> Logger:
     return logger.logger_
 
 
-@typechecked
 def _initialize_logger():
     global logger
     global logger_process_name

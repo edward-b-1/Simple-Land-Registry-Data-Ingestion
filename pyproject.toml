@@ -8,7 +8,6 @@ dependencies = [
     "psycopg[binary]==3.2.12",
     "requests==2.32.5",
     "sqlalchemy==2.0.44",
-    "typeguard==4.4.4",
 ]
 
 [tool.uv]
