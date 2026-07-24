@@ -305,8 +305,9 @@ def main():
 
     logger.info(f'postgres_host: {environment_variables.get_postgres_host()}')
     postgres_connection_string = environment_variables.get_psycopg3_postgres_connection_string_as_key_value_pairs()
+    postgres_connection_string_redacted = environment_variables.get_psycopg3_postgres_connection_string_as_key_value_pairs_redacted()
     logger.info(f'connecting to postgres using psycopg3')
-    logger.info(f'{postgres_connection_string}')
+    logger.info(f'{postgres_connection_string_redacted}')
 
     logger.info(f'process start: {datetime.now(timezone.utc)}')
 
@@ -341,8 +342,9 @@ def main():
 
     logger.info(f'create database engine: postgres_host={environment_variables.get_postgres_host()}')
     postgres_connection_string = environment_variables.get_postgres_psycopg3_connection_string()
+    postgres_connection_string_redacted = environment_variables.get_postgres_psycopg3_connection_string_redacted()
     logger.info(f'connecting to postgres using sqlalchemy')
-    logger.info(f'{postgres_connection_string}')
+    logger.info(f'{postgres_connection_string_redacted}')
     postgres_engine = create_engine(
         postgres_connection_string,
         #fast_executemany=True,

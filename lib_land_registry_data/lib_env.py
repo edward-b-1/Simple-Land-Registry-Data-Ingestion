@@ -58,6 +58,14 @@ class EnvironmentVariables():
         postgres_connection_string = f'postgresql+psycopg://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_database}'
         return postgres_connection_string
 
+    def get_postgres_psycopg3_connection_string_redacted(self) -> str:
+        postgres_user = self.postgres_user
+        postgres_password_redacted = '****'
+        postgres_host = self.postgres_host
+        postgres_database = self.postgres_database
+        postgres_connection_string = f'postgresql+psycopg://{postgres_user}:{postgres_password_redacted}@{postgres_host}/{postgres_database}'
+        return postgres_connection_string
+
     def get_psycopg3_postgres_connection_string_as_key_value_pairs(self) -> str:
         postgres_user = self.postgres_user
         postgres_password = self.postgres_password
@@ -65,6 +73,15 @@ class EnvironmentVariables():
         postgres_database = self.postgres_database
         postgres_port = self.postgres_port
         postgres_connection_string = f'user={postgres_user} password={postgres_password} host={postgres_host} dbname={postgres_database} port={postgres_port}'
+        return postgres_connection_string
+
+    def get_psycopg3_postgres_connection_string_as_key_value_pairs_redacted(self) -> str:
+        postgres_user = self.postgres_user
+        postgres_password_redacted = '****'
+        postgres_host = self.postgres_host
+        postgres_database = self.postgres_database
+        postgres_port = self.postgres_port
+        postgres_connection_string = f'user={postgres_user} password={postgres_password_redacted} host={postgres_host} dbname={postgres_database} port={postgres_port}'
         return postgres_connection_string
 
     def get_postgres_host(self) -> str:
