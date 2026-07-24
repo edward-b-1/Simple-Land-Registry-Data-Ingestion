@@ -1,13 +1,9 @@
 # TODO
 
-- Remove obsolete test scaffolding: `test.py`, `create_test_table.py`, `test_file.csv`
-  and the `TestTable` class in `lib_land_registry_data/lib_db.py` (was prototyping
-  for the psycopg3 `COPY FROM STDIN` bulk-load approach now used by `main.py`;
-  `test.py` contains placeholder credentials)
-- Remove or archive `main_minimal.py` (early non-chunked version of the pipeline,
-  contains a hardcoded password)
 - Decide whether the `typeguard` dependency stays (only used for `@typechecked`
   decorators in `lib_land_registry_data/logging.py`)
-- Consider replacing the `create_table_*.py` scripts with `init_db.py` (idempotent,
-  used by the docker ingestion container)
-- `lib_land_registry_data/lib_datetime_not_used.py` is unused (per its name)
+- `main.py` logs the full postgres connection string, including the password,
+  at INFO level (stdout and log file); consider redacting the password
+- `main_minimal.py` (kept as a quick manual test against the throw-away
+  dockerized database) has a hardcoded connection string pointing at
+  `192.168.1.232`; update it to read the `POSTGRES_*` environment variables
