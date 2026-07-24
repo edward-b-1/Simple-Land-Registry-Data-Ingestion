@@ -1,5 +1,10 @@
 
-postgres_connection_string = 'user=postgres password=postgres host=192.168.1.232 dbname=postgres port=5432'
+import os
+postgres_user = os.environ['POSTGRES_USER']
+postgres_password = os.environ['POSTGRES_PASSWORD']
+postgres_host = os.environ['POSTGRES_HOST']
+postgres_database = os.environ['POSTGRES_DATABASE']
+postgres_connection_string = f'user={postgres_user} password={postgres_password} host={postgres_host} dbname={postgres_database} port=5432'
 
 from datetime import datetime
 from datetime import timezone
