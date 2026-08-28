@@ -6,9 +6,10 @@ from high-street lenders, the Bank of England already collects them from the
 lenders and publishes aggregates for free, so no scraping of individual banks
 is needed.
 
-All of the series below are downloaded by `main_boe_rates.py` into
-`bank_of_england.iadb_series` / `bank_of_england.iadb_observation` (see the
-README).
+All of the series below are downloaded by `main_boe_rates.py`, one request
+per series, into one narrow table each in the `bank_of_england` schema
+(`<table> (observation_date, value)`, missing observations stored as NULL),
+with `bank_of_england.iadb_series` as the catalogue (see the README).
 
 ## Bank of England quoted and effective rates (the main source)
 
@@ -18,26 +19,26 @@ downloadable as CSV.
 
 ### Bank Rate
 
-| Series | Frequency | From |
-|---|---|---|
-| IUDBEDR — Official Bank Rate | daily (business days) | 1995 |
-| IUMABEDR — Monthly average of official Bank Rate | monthly | 1995 |
+| Series | Table | Frequency | From |
+|---|---|---|---|
+| IUDBEDR — Official Bank Rate | `bank_rate` | daily (business days) | 1995 |
+| IUMABEDR — Monthly average of official Bank Rate | `bank_rate_monthly_average` | monthly | 1995 |
 
 ### Quoted household interest rates
 
 The average *advertised* rate across major lenders for a given product
 (the descriptions are abridged from the official IADB text).
 
-| Product | Series | From |
-|---|---|---|
-| 2-year fixed, 75% LTV | IUMBV34 | 1995 |
-| 2-year fixed, 90% LTV | IUMB482 | 2008 |
-| 3-year fixed, 75% LTV | IUMBV37 | 1995 |
-| 5-year fixed, 75% LTV | IUMBV42 | 1995 |
-| 2-year variable, 75% LTV | IUMBV48 | 1997 |
-| 2-year variable, 90% LTV | IUMB479 | 2008 |
-| Lifetime tracker | IUMBV24 | 1997 (ends March 2025) |
-| Revert-to-rate (standard variable rate) | IUMTLMV | 1995 |
+| Product | Series | Table | From |
+|---|---|---|---|
+| 2-year fixed, 75% LTV | IUMBV34 | `mortgage_2y_fixed_75_ltv` | 1995 |
+| 2-year fixed, 90% LTV | IUMB482 | `mortgage_2y_fixed_90_ltv` | 2008 |
+| 3-year fixed, 75% LTV | IUMBV37 | `mortgage_3y_fixed_75_ltv` | 1995 |
+| 5-year fixed, 75% LTV | IUMBV42 | `mortgage_5y_fixed_75_ltv` | 1995 |
+| 2-year variable, 75% LTV | IUMBV48 | `mortgage_2y_variable_75_ltv` | 1997 |
+| 2-year variable, 90% LTV | IUMB479 | `mortgage_2y_variable_90_ltv` | 2008 (51 missing months) |
+| Lifetime tracker | IUMBV24 | `mortgage_lifetime_tracker` | 1997 (ends March 2025) |
+| Revert-to-rate (standard variable rate) | IUMTLMV | `mortgage_standard_variable_rate` | 1995 |
 
 The start dates of the core series line up almost exactly with the Price Paid
 data (1995).
@@ -47,14 +48,14 @@ data (1995).
 The rates *actually paid*, weighted by lending volume. These are the best
 measure of what buyers in a given month actually signed up to.
 
-| Measure | Series | From |
-|---|---|---|
-| Outstanding stock of loans secured on dwellings | CFMHSDE | 1999 |
-| New advances, floating rate | CFMBJ39 | 2004 |
-| New advances, initial fixation ≤ 1 year | CFMBJ42 | 2004 (ends 2015) |
-| New advances, initial fixation > 1 year ≤ 5 years | CFMBJ43 | 2004 (ends 2015) |
-| New advances, initial fixation > 5 years ≤ 10 years | CFMBJ44 | 2004 (ends 2015) |
-| New advances, initial fixation > 10 years | CFMBJ45 | 2004 (ends 2015) |
+| Measure | Series | Table | From |
+|---|---|---|---|
+| Outstanding stock of loans secured on dwellings | CFMHSDE | `effective_rate_outstanding_stock` | 1999 |
+| New advances, floating rate | CFMBJ39 | `effective_rate_new_floating` | 2004 |
+| New advances, initial fixation ≤ 1 year | CFMBJ42 | `effective_rate_new_fixed_le_1y` | 2004 (ends 2015) |
+| New advances, initial fixation > 1 year ≤ 5 years | CFMBJ43 | `effective_rate_new_fixed_1y_to_5y` | 2004 (ends 2015) |
+| New advances, initial fixation > 5 years ≤ 10 years | CFMBJ44 | `effective_rate_new_fixed_5y_to_10y` | 2004 (ends 2015) |
+| New advances, initial fixation > 10 years | CFMBJ45 | `effective_rate_new_fixed_gt_10y` | 2004 (ends 2015) |
 
 The fixation-band split of new advances stops at the end of 2015 in the IADB;
 a replacement series for total new advances post-2015 is still to be

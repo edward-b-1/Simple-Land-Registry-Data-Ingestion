@@ -61,14 +61,12 @@ psql -h localhost -p 5432 -U postgres postgres
 ```
 
 To drop and recreate tables (e.g. after changing a model in `lib_db.py`).
-Bare table names are looked up across all schemas; tables linked by a foreign
-key have to be dropped together:
+Bare table names are looked up across all schemas:
 
 ```shell
 docker compose run --rm ingestion python /app/init_db.py --recreate                                  # all tables
 docker compose run --rm ingestion python /app/init_db.py --recreate pp_complete_data                 # named tables only
-docker compose run --rm ingestion python /app/init_db.py --recreate iadb_observation iadb_series     # foreign key pair
-docker compose run --rm ingestion python /app/init_db.py --recreate bank_of_england.iadb_metadata    # schema qualified
+docker compose run --rm ingestion python /app/init_db.py --recreate bank_of_england.iadb_series      # schema qualified
 ```
 
 The database data lives in `./postgres_data/` (gitignored), so it survives
@@ -85,20 +83,28 @@ docker compose down
 # Bank of England data
 
 `main_boe_rates.py` downloads a fixed list of series from the Bank of England
-Interactive Statistical Database (see `SERIES_CONFIG` in the script and
-`MORTGAGE_RATES.md` for what they are) and reloads three tables in the
-`bank_of_england` schema on every run:
+Interactive Statistical Database, one request per series (see
+`lib_land_registry_data/lib_boe_series.py` for the list and
+`MORTGAGE_RATES.md` for what they are), and reloads the `bank_of_england`
+schema on every run:
 
-- `iadb_series` — one row per series: code, the official Bank of England
-  description, frequency (`daily` / `monthly`), category (`bank_rate`,
-  `quoted_mortgage_rate`, `effective_mortgage_rate`) and the date range loaded.
-- `iadb_observation` — long format, one row per series and date with a
-  non-missing value. Monthly series are stamped on the last day of the month;
-  the daily Bank Rate is present on business days only.
+- One narrow table per series, `<table_name> (observation_date, value)`,
+  e.g. `bank_rate` (daily official Bank Rate), `bank_rate_monthly_average`,
+  `mortgage_2y_fixed_75_ltv`, `mortgage_5y_fixed_75_ltv`,
+  `mortgage_standard_variable_rate`, `effective_rate_outstanding_stock`, ...
+  Rows exist only for the period the Bank of England reports the series;
+  within that period a missing observation is a row with `value` NULL.
+  Monthly series are stamped on the last day of the month; the daily Bank
+  Rate is present on business days only.
+- `iadb_series` — the catalogue: one row per series with its Bank of England
+  code, table name, official description, frequency (`daily` / `monthly`),
+  category (`bank_rate`, `quoted_mortgage_rate`, `effective_mortgage_rate`),
+  first/last date with a value, and observation / missing counts.
 - `iadb_metadata` — one row per run (append only).
 
-To add a series, add one line to `SERIES_CONFIG`; the description is taken
-from the Bank of England response.
+To add a series, add one line to `BOE_SERIES_CONFIG` (code, table name,
+frequency, category) and run `init_db.py`; the table model is generated from
+the list and the description is taken from the Bank of England response.
 
 # Querying across datasets
 
@@ -117,9 +123,8 @@ with monthly_price as (
 )
 select p.month, p.median_price, p.transactions, r.value as two_year_fixed_75_ltv
 from monthly_price p
-left join bank_of_england.iadb_observation r
-  on r.series_code = 'IUMBV34'
- and date_trunc('month', r.observation_date)::date = p.month
+left join bank_of_england.mortgage_2y_fixed_75_ltv r
+  on date_trunc('month', r.observation_date)::date = p.month
 order by p.month desc;
 ```
 

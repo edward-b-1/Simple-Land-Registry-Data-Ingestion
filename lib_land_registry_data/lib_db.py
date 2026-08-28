@@ -2,7 +2,6 @@
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy import BigInteger
-from sqlalchemy import ForeignKey
 from sqlalchemy import Numeric
 from sqlalchemy import String
 
@@ -15,6 +14,9 @@ from datetime import timedelta
 from decimal import Decimal
 
 from typing import Optional
+
+from lib_land_registry_data.lib_boe_series import SeriesConfig
+from lib_land_registry_data.lib_boe_series import BOE_SERIES_CONFIG
 
 
 class LandRegistryBase(DeclarativeBase):
@@ -70,38 +72,54 @@ class BankOfEnglandBase(DeclarativeBase):
     __table_args__ = {'schema': 'bank_of_england'}
 
 
-# one row per series downloaded from the Bank of England Interactive Database
-# (IADB); truncated and reloaded on every run. `description` is the official
-# text from the IADB, `frequency` and `category` come from the series config
-# in main_boe_rates.py
+# catalogue: one row per series downloaded from the Bank of England
+# Interactive Database (IADB); truncated and reloaded on every run.
+# `description` is the official text from the IADB, `table_name`,
+# `frequency` and `category` come from lib_boe_series.py
 class IADBSeries(BankOfEnglandBase):
 
     __tablename__ = 'iadb_series'
 
     series_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    table_name: Mapped[str] = mapped_column(String(64))
     description: Mapped[str]
     frequency: Mapped[str] = mapped_column(String(16)) # 'daily' | 'monthly'
     category: Mapped[str] = mapped_column(String(32)) # 'bank_rate' | 'quoted_mortgage_rate' | 'effective_mortgage_rate'
-    first_observation_date: Mapped[date]
-    last_observation_date: Mapped[date]
-    observation_count: Mapped[int]
+    first_observation_date: Mapped[Optional[date]] # first / last date with a value
+    last_observation_date: Mapped[Optional[date]]
+    observation_count: Mapped[int] # rows with a value
+    missing_count: Mapped[int] # rows the IADB reports as missing ('..'), stored with value NULL
     download_timestamp: Mapped[datetime]
 
 
-# long format: one row per (series, date) with a non-missing value. Monthly
-# series are stamped on the last day of the month, the daily Bank Rate on
-# business days only
-class IADBObservation(BankOfEnglandBase):
+# one narrow table per series: `bank_of_england.<table_name> (observation_date,
+# value)`. Rows only exist inside the period the IADB reports for the series;
+# within that period a missing observation ('..' in the download) is a row
+# with value NULL. Monthly series are stamped on the last day of the month,
+# the daily Bank Rate exists on business days only
+class IADBSeriesObservationMixin():
 
-    __tablename__ = 'iadb_observation'
-
-    series_code: Mapped[str] = mapped_column(
-        String(16),
-        ForeignKey('bank_of_england.iadb_series.series_code'),
-        primary_key=True,
-    )
     observation_date: Mapped[date] = mapped_column(primary_key=True)
-    value: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    value: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 6))
+
+
+def _create_iadb_series_table(config: SeriesConfig) -> type[BankOfEnglandBase]:
+    class_name = f'IADBSeriesTable_{config.code}'
+    return type(
+        class_name,
+        (IADBSeriesObservationMixin, BankOfEnglandBase),
+        {
+            '__tablename__': config.table_name,
+            '__doc__': f'Bank of England IADB series {config.code}',
+        },
+    )
+
+
+# series code -> model class, e.g. iadb_series_tables['IUMBV34']
+iadb_series_tables: dict[str, type[BankOfEnglandBase]] = {
+    config.code: _create_iadb_series_table(config)
+    for config in BOE_SERIES_CONFIG
+}
 
 
 # one row per ingestion run (append only), same idea as pp_complete_metadata
