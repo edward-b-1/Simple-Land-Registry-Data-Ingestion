@@ -32,27 +32,38 @@ implemented.
   Implement the unambiguous cases, then look at nearest-number matching and
   NSPL street lookups for the rest; record the source of any inferred
   postcode in a separate column rather than overwriting.
-- **PAON / SAON normalisation into separate fields.** The raw fields mix
-  conventions: PAON is a plain number (85.6% of category A), a name only
-  (10.6%), or `NAME, NUMBER` (3.1%, e.g. `MILNER COURT, 9` where `9` is the
-  street number of the block and SAON `FLAT 1` is the flat); SAON is empty
-  (88.5%), `FLAT n` / `APARTMENT n` (7.9%), a bare number (2.8% — sometimes a
-  flat number, sometimes the street number when PAON is a building name, as
-  in PAON `MILNER COURT` / SAON `2`), or a floor description. 2.24M category
-  A flat sales have no SAON at all, so their `property_key` collides with
-  other flats in the same building. Proposed target columns:
-  `building_number` (street number, incl. suffix e.g. `12A`),
-  `building_name`, `flat_number` (NULL for non-flats; from SAON or from a
-  bare-number SAON when PAON is a name), `flat_description` (floor etc.),
-  `plot_number`, plus an `address_pattern` code recording which rule
-  produced them. Then rebuild `property_key` from the normalised parts and
-  compare against OS Open UPRN / AddressBase where possible.
-- **Baseline for the address study.** Current `property_key` quality on
-  `pp_market_transactions` (13.8M consecutive pairs): share of pairs with a
-  >3× or <⅓ price move within 5 years — houses with numeric PAON 0.58%,
-  flats without SAON 0.47%, flats with SAON 0.32%, name-only PAON houses
-  1.21%, houses with a SAON 3.07%; 353k keys carry more than one property
-  type; worst keys have 20+ "sales". Re-measure after normalisation.
+- **PAON / SAON normalisation — first pass done, refinements open.**
+  `lib_land_registry_data/lib_address.py` splits PAON / SAON into
+  `building_number`, `building_name`, `flat_number`, `flat_description`
+  (flats only), `unit_description` (non-flats) and `plot_number`, records
+  the rule in `address_pattern`, and builds `property_key_normalised` =
+  `postcode|number-or-name|flat` (a number beats a name, so `MILNER COURT, 9`
+  and `9` on the same postcode are one building). Results on
+  `pp_market_transactions` versus the raw `postcode|PAON|SAON` key:
+  consecutive pairs 13.77M → 13.81M; pairs whose property type changes
+  between sales (a collision signal) for flats with a SAON 0.69% → 0.05%
+  and for flats with numeric PAON + SAON 1.36% → 0.55%; implausible pairs
+  (>3× or <⅓ within 5 years) unchanged at 0.59% overall (houses with numeric
+  PAON 0.58%, flats without SAON 0.47%, flats with SAON 0.31%, name-only
+  houses 1.20%, houses with a SAON 2.77%); keys with more than one property
+  type 353k → 349k; keys with 15+ sales 37 → 92 (merging the `NAME, n` and
+  `n` forms also merges flats that have no flat number — check these).
+  Remaining problems, in order of size:
+  - 2.35M of 5.65M flat sales have no flat identifier in the source at all
+    (PAON is a bare number, SAON empty). Parsing cannot fix this; it needs
+    an external address key (OS Open UPRN / AddressBase) or a heuristic
+    (e.g. treat each such sale as a distinct unit when the building has
+    known flats).
+  - `P_NAME/S_NUMBER` on non-flats (a bare-number SAON with a name PAON) is
+    assumed to be the house number; `P_NAME_NUMBER/S_NUMBER` on non-flats
+    is left as `unit_description` — both are guesses worth checking against
+    NSPL / UPRN.
+  - `P_OTHER` (58k) and `S_OTHER` (~140k) rows are stored unparsed
+    (`building_name` = raw PAON, description = raw SAON); typos
+    (`APARTMANT`), `BLOCK 4 ...`, `ROOM n`, `PARKING SPACE` etc. could get
+    rules if they matter.
+  - Ranges (`17-19`) are kept as one building; a sale of `17` and a sale of
+    `17-19` on the same postcode are different keys.
 - **First repeat-sales index build** should exclude flats without a SAON
   and pairs where `property_type` changes, and drop pairs outside ±3× per
   5 years, rather than wait for the normalisation.
