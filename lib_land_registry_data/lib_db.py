@@ -185,6 +185,7 @@ class PPTransactions(LandRegistryBase):
     ppd_cat: Mapped[str] # A = standard price paid, B = additional (repossessions, non-private, type O)
     # PAON / SAON normalised into parts, see lib_address.py
     address_pattern: Mapped[str] = mapped_column(String(32)) # which PAON/SAON rule fired, e.g. 'P_NAME_NUMBER/S_FLAT'
+    is_flat_like: Mapped[bool] # property_type F, or the address itself says flat/apartment
     building_number: Mapped[Optional[str]] # street number '12A' or range '17-19'
     building_name: Mapped[Optional[str]] # 'MILNER COURT'
     flat_number: Mapped[Optional[str]] # flats only: '3', 'D', 'G.03'

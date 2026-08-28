@@ -48,22 +48,42 @@ implemented.
   houses 1.20%, houses with a SAON 2.77%); keys with more than one property
   type 353k → 349k; keys with 15+ sales 37 → 92 (merging the `NAME, n` and
   `n` forms also merges flats that have no flat number — check these).
+  A distinct-value audit of the new columns then led to a second pass:
+  `NUMBER NAME, NUMBER` PAONs (`3 ALDHURST ROW, 19` → building 19, unit 3),
+  generic sub-unit words (`UNIT 16`, `GARAGE 14`, `BLOCK 1 ...`, bare
+  `UNITS`/`FLAT`) moved out of `building_name` into `unit_description`,
+  trailing `AT` stripped and a lone `FLAT` nulled in descriptions, an empty
+  PAON with a numeric SAON treated as the house number, leading zeros and
+  reversed ranges normalised, and — the one with real effect — an
+  `is_flat_like` flag (property type F *or* the address says flat) that now
+  drives the flat rules, because ~62k sales typed T/S/D carry `FLAT n`
+  addresses (11k of them appear elsewhere as type F; concentrated in
+  1995–2004). Side effect to remember: pairs whose `property_type` changes
+  between sales are now partly *correct* merges of mistyped flats, so that
+  metric (2.75% → 2.8%) no longer reads as a pure collision signal.
   Remaining problems, in order of size:
-  - 2.35M of 5.65M flat sales have no flat identifier in the source at all
-    (PAON is a bare number, SAON empty). Parsing cannot fix this; it needs
-    an external address key (OS Open UPRN / AddressBase) or a heuristic
-    (e.g. treat each such sale as a distinct unit when the building has
-    known flats).
+  - 2.36M of 5.71M flat-like sales have no flat identifier in the source at
+    all (PAON is a bare number, SAON empty). Parsing cannot fix this; it
+    needs an external address key (OS Open UPRN / AddressBase) or a
+    heuristic (e.g. treat each such sale as a distinct unit when the
+    building has known flats).
   - `P_NAME/S_NUMBER` on non-flats (a bare-number SAON with a name PAON) is
     assumed to be the house number; `P_NAME_NUMBER/S_NUMBER` on non-flats
     is left as `unit_description` — both are guesses worth checking against
     NSPL / UPRN.
-  - `P_OTHER` (58k) and `S_OTHER` (~140k) rows are stored unparsed
-    (`building_name` = raw PAON, description = raw SAON); typos
-    (`APARTMANT`), `BLOCK 4 ...`, `ROOM n`, `PARKING SPACE` etc. could get
-    rules if they matter.
+  - `NAME n` without a comma (`CRWYS COURT 11`, 16k) is ambiguous with real
+    names (`ASPECT 14`) and is left as a name; a rule keyed on a known
+    building-word suffix (COURT, HOUSE, ...) would catch most.
+  - `P_OTHER` and `S_OTHER` rows are stored unparsed (`building_name` = raw
+    PAON, description = raw SAON); `ROOM n`, `G102 GROSVENOR HOUSE` etc.
+    could get rules if they matter.
   - Ranges (`17-19`) are kept as one building; a sale of `17` and a sale of
     `17-19` on the same postcode are different keys.
+  - Floor-coded flat numbers (`0501`) are kept verbatim; `001` → `1` only
+    for values of three digits or fewer.
+  - The build now takes ~16 minutes (was 9) because of the regex work; fine
+    for a nightly refresh, but worth caching the parsed parts if the rules
+    keep growing.
 - **First repeat-sales index build** should exclude flats without a SAON
   and pairs where `property_type` changes, and drop pairs outside ±3× per
   5 years, rather than wait for the normalisation.

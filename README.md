@@ -103,9 +103,11 @@ questions in `TODO.md`):
 - `is_new_build` and `is_leasehold` booleans (`tenure` keeps the raw
   F / L / U code, `is_leasehold` is NULL for U).
 - PAON / SAON are split into `building_number`, `building_name`,
-  `flat_number` and `flat_description` (flats only), `unit_description`
-  (non-flats) and `plot_number`, with `address_pattern` recording which rule
+  `flat_number` and `flat_description` (flat-like rows), `unit_description`
+  (the rest) and `plot_number`, with `address_pattern` recording which rule
   fired (rules and examples in `lib_land_registry_data/lib_address.py`).
+  `is_flat_like` is true when `property_type` is F *or* the address itself
+  says flat/apartment — the source sometimes types a flat as a house.
 - `property_key` = raw `postcode|PAON|SAON`, and `property_key_normalised` =
   `postcode|number-or-name|flat` from the split parts, for repeat-sales
   matching (both NULL when the postcode is missing).

@@ -15,6 +15,7 @@ from lib_land_registry_data.logging import create_file_log_handler
 
 from lib_land_registry_data.lib_db import PPTransactions
 
+from lib_land_registry_data.lib_address import ADDRESS_PARTS_SQL
 from lib_land_registry_data.lib_address import ADDRESS_NORMALISATION_SQL
 from lib_land_registry_data.lib_address import PROPERTY_KEY_NORMALISED_SQL
 
@@ -96,6 +97,7 @@ insert into {TARGET_TABLE} (
     county,
     ppd_cat,
     address_pattern,
+    is_flat_like,
     building_number,
     building_name,
     flat_number,
@@ -124,8 +126,8 @@ with base as (
         property_type,
         new_tag,
         lease,
-        primary_address_object_name as paon,
-        secondary_address_object_name as saon,
+        btrim(primary_address_object_name) as paon,
+        btrim(secondary_address_object_name) as saon,
         street,
         locality,
         town_city,
@@ -156,12 +158,18 @@ keyed as (
     from deduplicated
     where duplicate_rank = 1
 ),
-normalised as (
+address_parts as (
     -- PAON / SAON split into parts, see lib_address.py
     select
         *,
-        {ADDRESS_NORMALISATION_SQL}
+        {ADDRESS_PARTS_SQL}
     from keyed
+),
+normalised as (
+    select
+        *,
+        {ADDRESS_NORMALISATION_SQL}
+    from address_parts
 ),
 normalised_keyed as (
     select
@@ -201,6 +209,7 @@ select
     county,
     ppd_cat,
     address_pattern,
+    is_flat_like,
     building_number,
     building_name,
     flat_number,
@@ -292,8 +301,8 @@ def log_summary(postgres_connection_string: str) -> None:
                 min(transaction_date),
                 max(transaction_date),
                 count(*) filter (where property_key_normalised is null),
-                count(*) filter (where property_type = 'F'),
-                count(*) filter (where property_type = 'F' and flat_number is null and flat_description is null)
+                count(*) filter (where is_flat_like),
+                count(*) filter (where is_flat_like and flat_number is null and flat_description is null)
             from {TARGET_TABLE}
         """).fetchone()
 
@@ -307,7 +316,7 @@ def log_summary(postgres_connection_string: str) -> None:
     logger.info(f'rows: {total} ({min_date} -> {max_date})')
     logger.info(f'ppd_cat A: {cat_a}, B: {cat_b}')
     logger.info(f'no postcode: {no_postcode}, no property_key: {no_property_key}, no property_key_normalised: {no_property_key_normalised}')
-    logger.info(f'flats: {flats}, of which without a flat number or description: {flats_without_identifier}')
+    logger.info(f'flat-like rows: {flats}, of which without a flat number or description: {flats_without_identifier}')
     logger.info(f'implausible price (outside {PLAUSIBLE_PRICE_MIN}..{PLAUSIBLE_PRICE_MAX}): {implausible}')
     logger.info(f'rows that had exact duplicates: {had_duplicates} ({duplicates_collapsed} duplicate rows collapsed)')
     logger.info(f'multi sale same day: {multi_sale}')
