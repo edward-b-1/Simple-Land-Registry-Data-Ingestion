@@ -105,7 +105,11 @@ with base as (
         transaction_unique_id,
         price,
         transaction_date::date as transaction_date,
-        nullif(btrim(postcode), '') as postcode,
+        -- trimmed, and NULL unless it looks like a UK postcode (the raw data
+        -- has empty postcodes and the odd placeholder such as 'UNKNOWN')
+        case
+            when btrim(postcode) ~ '^[A-Z]{{1,2}}[0-9][0-9A-Z]? [0-9][A-Z]{{2}}$' then btrim(postcode)
+        end as postcode,
         property_type,
         new_tag,
         lease,
