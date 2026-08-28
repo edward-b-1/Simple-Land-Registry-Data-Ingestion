@@ -158,6 +158,7 @@ class PPTransactions(LandRegistryBase):
         Index('ix_pp_transactions_transaction_month', 'transaction_month'),
         Index('ix_pp_transactions_postcode', 'postcode'),
         Index('ix_pp_transactions_property_key', 'property_key'),
+        Index('ix_pp_transactions_property_key_normalised', 'property_key_normalised'),
         Index('ix_pp_transactions_ppd_cat_transaction_date', 'ppd_cat', 'transaction_date'),
         {'schema': 'land_registry'},
     )
@@ -182,7 +183,16 @@ class PPTransactions(LandRegistryBase):
     district: Mapped[str]
     county: Mapped[str]
     ppd_cat: Mapped[str] # A = standard price paid, B = additional (repossessions, non-private, type O)
-    property_key: Mapped[Optional[str]] # postcode|PAON|SAON, NULL when postcode or PAON missing
+    # PAON / SAON normalised into parts, see lib_address.py
+    address_pattern: Mapped[str] = mapped_column(String(32)) # which PAON/SAON rule fired, e.g. 'P_NAME_NUMBER/S_FLAT'
+    building_number: Mapped[Optional[str]] # street number '12A' or range '17-19'
+    building_name: Mapped[Optional[str]] # 'MILNER COURT'
+    flat_number: Mapped[Optional[str]] # flats only: '3', 'D', 'G.03'
+    flat_description: Mapped[Optional[str]] # flats only: 'FIRST FLOOR FLAT'
+    unit_description: Mapped[Optional[str]] # non-flats: 'UNIT 4', 'GARAGE 2'
+    plot_number: Mapped[Optional[str]] # 'PLOT 4' -> '4'
+    property_key: Mapped[Optional[str]] # raw: postcode|PAON|SAON, NULL when postcode or PAON missing
+    property_key_normalised: Mapped[Optional[str]] # postcode|number-or-name|flat, from the normalised parts
     is_plausible_price: Mapped[bool] # see PLAUSIBLE_PRICE_* in main_pp_transactions.py
     duplicate_count: Mapped[int] # rows in pp_complete_data collapsed into this one
     is_multi_sale_same_day: Mapped[bool] # same property_key sold more than once on the date

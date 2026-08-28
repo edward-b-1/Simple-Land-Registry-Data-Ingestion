@@ -102,8 +102,13 @@ questions in `TODO.md`):
   (`district` / `county` names change over time).
 - `is_new_build` and `is_leasehold` booleans (`tenure` keeps the raw
   F / L / U code, `is_leasehold` is NULL for U).
-- `property_key` = `postcode|PAON|SAON` for repeat-sales matching (NULL when
-  the postcode or PAON is missing).
+- PAON / SAON are split into `building_number`, `building_name`,
+  `flat_number` and `flat_description` (flats only), `unit_description`
+  (non-flats) and `plot_number`, with `address_pattern` recording which rule
+  fired (rules and examples in `lib_land_registry_data/lib_address.py`).
+- `property_key` = raw `postcode|PAON|SAON`, and `property_key_normalised` =
+  `postcode|number-or-name|flat` from the split parts, for repeat-sales
+  matching (both NULL when the postcode is missing).
 - Exact duplicate rows (identical apart from the id, typically one row per
   title in a portfolio sale) are collapsed onto one row, with
   `duplicate_count` recording how many there were.

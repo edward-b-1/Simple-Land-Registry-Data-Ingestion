@@ -15,6 +15,9 @@ from lib_land_registry_data.logging import create_file_log_handler
 
 from lib_land_registry_data.lib_db import PPTransactions
 
+from lib_land_registry_data.lib_address import ADDRESS_NORMALISATION_SQL
+from lib_land_registry_data.lib_address import PROPERTY_KEY_NORMALISED_SQL
+
 
 PROCESS_NAME = 'simple_land_registry_pp_transactions'
 
@@ -92,7 +95,15 @@ insert into {TARGET_TABLE} (
     district,
     county,
     ppd_cat,
+    address_pattern,
+    building_number,
+    building_name,
+    flat_number,
+    flat_description,
+    unit_description,
+    plot_number,
     property_key,
+    property_key_normalised,
     is_plausible_price,
     duplicate_count,
     is_multi_sale_same_day,
@@ -145,15 +156,28 @@ keyed as (
     from deduplicated
     where duplicate_rank = 1
 ),
+normalised as (
+    -- PAON / SAON split into parts, see lib_address.py
+    select
+        *,
+        {ADDRESS_NORMALISATION_SQL}
+    from keyed
+),
+normalised_keyed as (
+    select
+        *,
+        {PROPERTY_KEY_NORMALISED_SQL} as property_key_normalised
+    from normalised
+),
 flagged as (
     select
         *,
         price between %(price_min)s and %(price_max)s as is_plausible_price,
         case
-            when property_key is not null then count(*) over (partition by property_key, transaction_date) > 1
+            when property_key_normalised is not null then count(*) over (partition by property_key_normalised, transaction_date) > 1
             else false
         end as is_multi_sale_same_day
-    from keyed
+    from normalised_keyed
 )
 select
     transaction_unique_id,
@@ -176,7 +200,15 @@ select
     district,
     county,
     ppd_cat,
+    address_pattern,
+    building_number,
+    building_name,
+    flat_number,
+    flat_description,
+    unit_description,
+    plot_number,
     property_key,
+    property_key_normalised,
     is_plausible_price,
     duplicate_count,
     is_multi_sale_same_day,
@@ -258,19 +290,24 @@ def log_summary(postgres_connection_string: str) -> None:
                 count(*) filter (where is_multi_sale_same_day),
                 count(*) filter (where is_market_transaction),
                 min(transaction_date),
-                max(transaction_date)
+                max(transaction_date),
+                count(*) filter (where property_key_normalised is null),
+                count(*) filter (where property_type = 'F'),
+                count(*) filter (where property_type = 'F' and flat_number is null and flat_description is null)
             from {TARGET_TABLE}
         """).fetchone()
 
     (
         total, cat_a, cat_b, no_postcode, no_property_key, implausible,
         had_duplicates, duplicates_collapsed, multi_sale, market, min_date, max_date,
+        no_property_key_normalised, flats, flats_without_identifier,
     ) = row
 
     logger.info(f'summary of {TARGET_TABLE}:')
     logger.info(f'rows: {total} ({min_date} -> {max_date})')
     logger.info(f'ppd_cat A: {cat_a}, B: {cat_b}')
-    logger.info(f'no postcode: {no_postcode}, no property_key: {no_property_key}')
+    logger.info(f'no postcode: {no_postcode}, no property_key: {no_property_key}, no property_key_normalised: {no_property_key_normalised}')
+    logger.info(f'flats: {flats}, of which without a flat number or description: {flats_without_identifier}')
     logger.info(f'implausible price (outside {PLAUSIBLE_PRICE_MIN}..{PLAUSIBLE_PRICE_MAX}): {implausible}')
     logger.info(f'rows that had exact duplicates: {had_duplicates} ({duplicates_collapsed} duplicate rows collapsed)')
     logger.info(f'multi sale same day: {multi_sale}')
