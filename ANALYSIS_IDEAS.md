@@ -53,7 +53,8 @@ it.
 | Index of Multiple Deprivation | LSOA | Price vs deprivation; gentrification detection (areas whose relative price rank rises fastest). |
 | Census 2021 | LSOA/MSOA | Tenure, household composition, occupation, age — explain price variance. |
 | Bank of England base rate / mortgage rates | date | Affordability models, rate sensitivity of volumes. |
-| ONS earnings (ASHE) by local authority | district + year | Price-to-earnings ratios over time — affordability maps. |
+| ONS earnings (ASHE) by region / local authority | district + year | Price-to-earnings ratios over time — affordability maps. Also usable as a deflator: dividing prices by a regional wage index de-trends against local earnings rather than CPI (see `PRICE_INDEX.md`). |
+| ONS earnings distributions (ASHE percentiles: 10th/25th/median/75th/90th, by residence or workplace, full-/part-time) | region or district + year | Quantile-to-quantile affordability: lower-quartile house price vs lower-quartile earnings, share of local earners who can afford the median local home at a given income multiple, and how the gap between price and wage distributions has widened by region. ASHE is individual employee pay, so pair with household income estimates (ONS small-area income estimates by MSOA) for household-level affordability. |
 | Ordnance Survey Open UPRN / Open Names / AddressBase (partial) | address | Canonical property identifier; better dedup than address string matching. |
 | School data (Ofsted ratings, DfE performance tables) | lat/long / catchment | The classic "good school premium" study. |
 | Rail/tube stations (NaPTAN), Crossrail opening dates | lat/long distance | Transport premium; before/after event studies (Elizabeth line 2022). |
