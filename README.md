@@ -80,6 +80,39 @@ To stop the database:
 docker compose down
 ```
 
+# Cleaned Price Paid data
+
+`main.py` loads `pp-complete.txt` as-is into `land_registry.pp_complete_data`
+(the audit copy, no indexes). `main_pp_transactions.py` then rebuilds
+`land_registry.pp_transactions`, the analysis-ready version, from it; the
+`ingestion` service runs both. It can also be run on its own after changing
+the cleaning rules:
+
+```shell
+docker compose run --rm ingestion python /app/main_pp_transactions.py
+```
+
+What the cleaning does (details and counts in `ANALYSIS_IDEAS.md`, open
+questions in `TODO.md`):
+
+- `transaction_date` becomes a `date`; `transaction_month` (first of the
+  month) is added for joins to monthly series.
+- Postcodes are trimmed and empty ones stored as NULL; `postcode_area`,
+  `postcode_district` and `postcode_sector` are derived as stable geography
+  (`district` / `county` names change over time).
+- `is_new_build` and `is_leasehold` booleans (`tenure` keeps the raw
+  F / L / U code, `is_leasehold` is NULL for U).
+- `property_key` = `postcode|PAON|SAON` for repeat-sales matching (NULL when
+  the postcode or PAON is missing).
+- Exact duplicate rows (identical apart from the id, typically one row per
+  title in a portfolio sale) are collapsed onto one row, with
+  `duplicate_count` recording how many there were.
+- Flags: `is_plausible_price` (provisional thresholds, see `TODO.md`),
+  `is_multi_sale_same_day` (same property sold more than once on the date),
+  and `is_market_transaction` = category A, plausible price, single sale.
+- The view `land_registry.pp_market_transactions` selects
+  `is_market_transaction` rows and is the default input for price analysis.
+
 # Bank of England data
 
 `main_boe_rates.py` downloads a fixed list of series from the Bank of England

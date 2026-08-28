@@ -2,6 +2,7 @@
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy import BigInteger
+from sqlalchemy import Index
 from sqlalchemy import Numeric
 from sqlalchemy import String
 
@@ -143,3 +144,46 @@ class IADBMetadata(BankOfEnglandBase):
 # every declarative base (one per data source); init_db.py creates the schema
 # and tables for all of them
 all_bases: list[type[DeclarativeBase]] = [LandRegistryBase, BankOfEnglandBase]
+
+
+# cleaned, analysis-ready copy of pp_complete_data, rebuilt by
+# main_pp_transactions.py after every load. Exact duplicate rows are collapsed
+# (duplicate_count keeps the count); the flags mark rows that price indices
+# and repeat-sales analyses should exclude. The raw table is left untouched
+class PPTransactions(LandRegistryBase):
+
+    __tablename__ = 'pp_transactions'
+    __table_args__ = (
+        Index('ix_pp_transactions_transaction_date', 'transaction_date'),
+        Index('ix_pp_transactions_transaction_month', 'transaction_month'),
+        Index('ix_pp_transactions_postcode', 'postcode'),
+        Index('ix_pp_transactions_property_key', 'property_key'),
+        Index('ix_pp_transactions_ppd_cat_transaction_date', 'ppd_cat', 'transaction_date'),
+        {'schema': 'land_registry'},
+    )
+
+    transaction_unique_id: Mapped[str] = mapped_column(primary_key=True)
+    price: Mapped[int] = mapped_column(BigInteger)
+    transaction_date: Mapped[date]
+    transaction_month: Mapped[date] # first day of the month, for joins to monthly series
+    postcode: Mapped[Optional[str]] # trimmed, NULL when missing
+    postcode_area: Mapped[Optional[str]] # 'CR'
+    postcode_district: Mapped[Optional[str]] # 'CR4'
+    postcode_sector: Mapped[Optional[str]] # 'CR4 4'
+    property_type: Mapped[str] # D / S / T / F / O
+    is_new_build: Mapped[bool]
+    tenure: Mapped[str] # F / L / U (unknown)
+    is_leasehold: Mapped[Optional[bool]] # NULL when tenure is unknown
+    primary_address_object_name: Mapped[str]
+    secondary_address_object_name: Mapped[str]
+    street: Mapped[str]
+    locality: Mapped[str]
+    town_city: Mapped[str]
+    district: Mapped[str]
+    county: Mapped[str]
+    ppd_cat: Mapped[str] # A = standard price paid, B = additional (repossessions, non-private, type O)
+    property_key: Mapped[Optional[str]] # postcode|PAON|SAON, NULL when postcode or PAON missing
+    is_plausible_price: Mapped[bool] # see PLAUSIBLE_PRICE_* in main_pp_transactions.py
+    duplicate_count: Mapped[int] # rows in pp_complete_data collapsed into this one
+    is_multi_sale_same_day: Mapped[bool] # same property_key sold more than once on the date
+    is_market_transaction: Mapped[bool] # ppd_cat A, plausible price, single sale that day

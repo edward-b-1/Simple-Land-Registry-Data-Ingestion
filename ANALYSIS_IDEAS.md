@@ -20,12 +20,20 @@ it.
 
 ### Data hygiene first
 
-- `record_op` — the file contains change/delete records as well as additions,
-  so these need resolving (apply C/D against A by `transaction_unique_id`)
-  before any counts are trustworthy.
+- `record_op` — in `pp-complete.txt` every row is an addition (`A`); the
+  change/delete records only appear in the monthly update files. The
+  cleaning step asserts this rather than resolving it.
 - Filter `ppd_cat = 'A'` for market analysis.
-- Decide how to treat the "O" (other) property type — it is mostly
-  commercial/odd lots and skews averages massively.
+- The "O" (other) property type is entirely within category B, so the
+  category A filter removes it — it is mostly commercial/odd lots and skews
+  averages massively.
+- Exact duplicate rows (same everything except the id, typically one row
+  per title in a portfolio sale) and same-property-same-day multi sales are
+  flagged and excluded from market transactions.
+
+These steps are implemented in `main_pp_transactions.py`, which builds
+`land_registry.pp_transactions` and the `pp_market_transactions` view (see
+the README); open questions are in `TODO.md`.
 
 ### Other quick wins
 

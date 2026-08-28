@@ -90,9 +90,14 @@ def main(recreate: list[str]|None):
 
     if recreate is not None:
         table_keys_to_drop = resolve_table_keys(recreate)
-        for table_key in table_keys_to_drop:
-            logger.info(f'drop table {table_key}')
-            tables[table_key].drop(engine, checkfirst=True)
+        with engine.connect() as connection:
+            for table_key in table_keys_to_drop:
+                # cascade also removes views built on the table, e.g.
+                # land_registry.pp_market_transactions (recreated by
+                # main_pp_transactions.py)
+                logger.info(f'drop table {table_key} cascade')
+                connection.execute(text(f'drop table if exists {table_key} cascade'))
+            connection.commit()
 
     for base in all_bases:
         base.metadata.create_all(engine, checkfirst=True)
