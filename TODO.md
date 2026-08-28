@@ -14,9 +14,17 @@ implemented.
 - **Reverse-engineer missing postcodes.** 50,369 rows have no postcode:
   ~36k are category B type O (land / commercial parcels, often with no
   street either — these drive the 2016–2025 spike), ~14k are category A
-  homes spread evenly over 1995–2026 (~450/year; rural named properties,
-  `PLOT n` new builds sold before a postcode was allocated, 2,037 with no
-  street). A first pass on the 12,086 category A rows with a street found:
+  homes spread over 1995–2026 (~450/year; rural named properties, `PLOT n`
+  new builds sold before a postcode was allocated, 2,037 with no street).
+  The new-build cases are old, not recent: they peak in 2000–2004
+  (128–267/year), fall away after 2011 and are essentially gone since 2015
+  (0–6/year; in the 12 months to June 2026 only 162 of 598,909 category A
+  sales lack a postcode, one of them a new build). The Land Registry does not
+  backfill: 2001–2003 `PLOT n` sales still have no postcode 20+ years on,
+  and only 19 of the 1,743 no-postcode new-build rows with a street reappear
+  later under the same address with a postcode. So recovery has to be done
+  here, and the yield will be modest. A first pass on the 12,086 category A
+  rows with a street found:
   370 have another sale of the exact same address with a single postcode
   (recoverable directly), 2,751 more sit on a street+town that maps to a
   single postcode, 7,678 are on a street with several postcodes (need the
