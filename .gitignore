@@ -210,3 +210,6 @@ logs/
 
 # postgres data directory (docker bind mount)
 postgres_data/
+
+# local docker-compose configuration (copy from .env.example)
+.env

@@ -19,13 +19,19 @@ docker compose up -d postgres
 docker compose run --rm ingestion
 ```
 
-Configuration lives in `docker-compose.yml`, with default values in the
-committed `.env` file. Override defaults via shell environment variables (which
-take precedence over `.env`) rather than editing `.env` locally, e.g. if host
-port 5432 is already in use:
+Configuration lives in `docker-compose.yml` and is read from a local `.env`
+file (gitignored). Create it from the committed template and set your own
+values, e.g. a password and, if host port 5432 is already in use, another port:
 
 ```shell
-POSTGRES_HOST_PORT=5433 POSTGRES_PASSWORD=changeme docker compose up -d postgres
+cp .env.example .env
+```
+
+Shell environment variables take precedence over `.env`, so one-off overrides
+also work:
+
+```shell
+POSTGRES_HOST_PORT=5433 docker compose up -d postgres
 ```
 
 Log files are written to `./logs/` on the host (the ingestion process also
