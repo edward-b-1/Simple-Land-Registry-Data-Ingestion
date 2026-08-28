@@ -10,7 +10,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-COPY main.py init_db.py ./
+COPY main.py main_boe_rates.py init_db.py ./
 COPY lib_land_registry_data/ ./lib_land_registry_data/
 
 ENV PATH="/app/.venv/bin:$PATH"

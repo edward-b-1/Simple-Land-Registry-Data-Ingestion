@@ -20,13 +20,39 @@ services:
       retries: 12
     restart: unless-stopped
 
-  # one-shot data sync process, run with:
+  # Each dataset is a separate one-shot service under its own profile, so
+  # they can be refreshed independently. All of them share the same image.
+  # Re-run with `--build` after changing any of the python code.
+
+  # UK Land Registry Price Paid data sync, run with:
   #   docker compose run --rm ingestion
   ingestion:
     build: .
+    image: simple-land-registry-data-ingestion
     container_name: land-registry-ingestion
     profiles:
       - ingestion
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
+  # Bank of England interest rates (Bank Rate, quoted and effective mortgage
+  # rates from the BoE Interactive Database), run with:
+  #   docker compose run --rm boe-ingestion
+  boe-ingestion:
+    build: .
+    image: simple-land-registry-data-ingestion
+    container_name: bank-of-england-ingestion
+    profiles:
+      - boe-ingestion
+    command: ["sh", "-c", "python /app/init_db.py && python /app/main_boe_rates.py"]
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER:-postgres}

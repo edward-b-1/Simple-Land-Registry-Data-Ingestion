@@ -6,37 +6,75 @@ from high-street lenders, the Bank of England already collects them from the
 lenders and publishes aggregates for free, so no scraping of individual banks
 is needed.
 
+All of the series below are downloaded by `main_boe_rates.py` into
+`bank_of_england.iadb_series` / `bank_of_england.iadb_observation` (see the
+README).
+
 ## Bank of England quoted and effective rates (the main source)
 
-The BoE Interactive Database (Bankstats tables G1.3 / G1.4) has two families
-of monthly series, all compiled from lender submissions and downloadable as
-CSV.
+The BoE Interactive Statistical Database (IADB, Bankstats tables G1.3 / G1.4)
+has two families of monthly series, all compiled from lender submissions and
+downloadable as CSV.
+
+### Bank Rate
+
+| Series | Frequency | From |
+|---|---|---|
+| IUDBEDR — Official Bank Rate | daily (business days) | 1995 |
+| IUMABEDR — Monthly average of official Bank Rate | monthly | 1995 |
 
 ### Quoted household interest rates
 
-The average *advertised* rate across major lenders for a given product.
+The average *advertised* rate across major lenders for a given product
+(the descriptions are abridged from the official IADB text).
 
 | Product | Series | From |
 |---|---|---|
 | 2-year fixed, 75% LTV | IUMBV34 | 1995 |
-| 2-year fixed, 90% LTV | IUMB482 | 1995 |
+| 2-year fixed, 90% LTV | IUMB482 | 2008 |
+| 3-year fixed, 75% LTV | IUMBV37 | 1995 |
 | 5-year fixed, 75% LTV | IUMBV42 | 1995 |
-| 2-year variable (tracker), 75% LTV | IUMBV24 | 1995 |
-| Standard variable rate | IUMTLMV | 1995 |
+| 2-year variable, 75% LTV | IUMBV48 | 1997 |
+| 2-year variable, 90% LTV | IUMB479 | 2008 |
+| Lifetime tracker | IUMBV24 | 1997 (ends March 2025) |
+| Revert-to-rate (standard variable rate) | IUMTLMV | 1995 |
 
-The start dates line up almost exactly with the Price Paid data (1995).
+The start dates of the core series line up almost exactly with the Price Paid
+data (1995).
 
 ### Effective interest rates
 
-The rates *actually paid*, weighted by lending volume, split by new business
-vs outstanding stock and fixed vs floating (e.g. the effective rate on new
-mortgages, series CFMHSDE). These run from 2004 and are the best measure of
-what buyers in a given month actually signed up to.
+The rates *actually paid*, weighted by lending volume. These are the best
+measure of what buyers in a given month actually signed up to.
+
+| Measure | Series | From |
+|---|---|---|
+| Outstanding stock of loans secured on dwellings | CFMHSDE | 1999 |
+| New advances, floating rate | CFMBJ39 | 2004 |
+| New advances, initial fixation ≤ 1 year | CFMBJ42 | 2004 (ends 2015) |
+| New advances, initial fixation > 1 year ≤ 5 years | CFMBJ43 | 2004 (ends 2015) |
+| New advances, initial fixation > 5 years ≤ 10 years | CFMBJ44 | 2004 (ends 2015) |
+| New advances, initial fixation > 10 years | CFMBJ45 | 2004 (ends 2015) |
+
+The fixation-band split of new advances stops at the end of 2015 in the IADB;
+a replacement series for total new advances post-2015 is still to be
+identified.
 
 Both families are far more useful than the base rate alone, because the
 spread between base rate and mortgage rates is a story in itself: it blew out
 in 2008–09 (base rate fell to 0.5% but mortgage rates barely moved), narrowed
 through the 2010s, and lagged again in 2022.
+
+### Accessing the IADB programmatically
+
+`https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp`
+with query parameters `csv.x=yes`, `Datefrom=01/Jan/1995`, `Dateto=now`,
+`SeriesCodes=<comma separated codes>`, `CSVF=TT`, `UsingCodes=Y`, `VPD=Y`,
+`VFD=N` returns a CSV with a `SERIES,DESCRIPTION` header block followed by
+the data. Two quirks: the default `python-requests` User-Agent is rejected
+with HTTP 403 (a browser-like one works), and an unknown series code is
+answered with a 302 redirect to an error page rather than an error status.
+Missing values are empty or `..`.
 
 ## Supporting sources
 
@@ -79,3 +117,5 @@ money) and why 2022–23 bit so hard.
   forced-sale pressure.
 - Completions lag mortgage offers by a few months, so match the rate at
   approximately `transaction_date − 3 months`.
+- Monthly series are stamped on the last day of the month in the database, so
+  join on `date_trunc('month', ...)`.
