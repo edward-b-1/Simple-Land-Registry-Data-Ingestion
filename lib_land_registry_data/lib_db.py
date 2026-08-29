@@ -141,6 +141,57 @@ class IADBMetadata(BankOfEnglandBase):
     database_upload_duration: Mapped[timedelta]
 
 
+# address / postcode validation of pp_transactions against the NSPL and
+# against the other sales at the same place, one row per transaction
+# (rebuilt by main_pp_validation.py). Boolean checks: true = flagged.
+# `issue_count` counts the checks that indicate a bad row; the remaining
+# checks (postcode_no_coordinates, street_missing, flat_without_identifier,
+# district_matches_lad) are informational
+class PPAddressValidation(LandRegistryBase):
+
+    __tablename__ = 'pp_address_validation'
+    __table_args__ = (
+        Index('ix_pp_address_validation_issue_count', 'issue_count'),
+        {'schema': 'land_registry'},
+    )
+
+    transaction_unique_id: Mapped[str] = mapped_column(primary_key=True)
+    # postcode checks (against ons.nspl_postcode)
+    postcode_missing: Mapped[bool]
+    postcode_not_in_nspl: Mapped[bool] # postcode never existed according to the NSPL
+    postcode_introduced_after_sale: Mapped[bool] # NSPL introduction date more than a year after the sale (informational: Royal Mail recodes applied to old sales)
+    postcode_terminated_before_sale: Mapped[bool] # NSPL termination date more than a year before the sale
+    postcode_no_coordinates: Mapped[bool] # the NSPL has no grid reference for it (informational)
+    # geography name checks
+    district_matches_lad: Mapped[bool] # PPD district equals the NSPL local authority name after normalisation (informational)
+    district_unusual_for_lad_year: Mapped[bool] # district name used by <1% of that local authority's sales in that year
+    county_unusual_for_lad_year: Mapped[bool]
+    town_unusual_for_postcode_district: Mapped[bool] # town used by <1% of sales in that postcode district
+    # street / address checks (against other sales at the same postcode)
+    street_missing: Mapped[bool] # informational
+    street_unusual_for_postcode: Mapped[bool] # street used once at a postcode with 10+ sales
+    address_unparsed: Mapped[bool] # PAON or SAON did not fit any pattern
+    flat_without_identifier: Mapped[bool] # informational: flat with no flat number or description in the source
+    property_type_conflicts_address: Mapped[bool] # address says flat, property_type says house
+    issue_count: Mapped[int]
+    # NSPL geography for convenience
+    nspl_lad_code: Mapped[Optional[str]] = mapped_column(String(9))
+    nspl_lad_name: Mapped[Optional[str]]
+
+
+# one row per check per run (append only), to see how the flags move as the
+# data and the rules change
+class PPAddressValidationSummary(LandRegistryBase):
+
+    __tablename__ = 'pp_address_validation_summary'
+
+    pp_address_validation_summary_id: Mapped[int] = mapped_column(primary_key=True)
+    run_timestamp: Mapped[datetime]
+    check_name: Mapped[str] = mapped_column(String(64))
+    flagged_count: Mapped[int] = mapped_column(BigInteger)
+    total_count: Mapped[int] = mapped_column(BigInteger)
+
+
 # Office for National Statistics data (the National Statistics Postcode
 # Lookup, NSPL) in its own schema
 class ONSBase(DeclarativeBase):

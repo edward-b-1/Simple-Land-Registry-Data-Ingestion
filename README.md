@@ -176,6 +176,61 @@ downloads the zip and reloads the `ons` schema on every run:
 join is a plain equality; include terminated postcodes, since older sales
 were registered against postcodes that have since been retired.
 
+`nspl_postcode` columns (the NSPL name is in brackets; `*_code` values are
+GSS codes, look them up in `nspl_code_lookup` with the same prefix):
+
+| column | meaning |
+|---|---|
+| `pcds`, `pcd7`, `pcd8` | the postcode in single-space, 7-character and 8-character fixed-width forms |
+| `dointr`, `doterm` | month the postcode was introduced / terminated (NULL = live) |
+| `usrtypind` | 0 = small user (normal), 1 = large user (single organisation) |
+| `east1m`, `north1m`, `gridind` | OS grid reference in metres and its positional quality (1 = within the building, 8 = postcode centroid, 9 = none) |
+| `lat`, `long` | WGS84 coordinates of the postcode centroid, NULL when `gridind` = 9 |
+| `oa_code` (oa21cd) | census output area, the smallest statistical area |
+| `lsoa_code`, `msoa_code` (lsoa21cd, msoa21cd) | lower / middle layer super output areas (~1,500 / ~7,500 people) |
+| `lad_code` (lad25cd) | local authority district |
+| `cty_code`, `ced_code` (cty25cd, ced25cd) | county and county electoral division (E99999999 where none) |
+| `wd_code` (wd25cd) | electoral ward |
+| `rgn_code` (rgn25cd) | region — England only, W99999999 etc. elsewhere |
+| `ctry_code` (ctry25cd) | country (E92000001 England, W92000004 Wales, ...) |
+| `pcon_code` (pcon24cd) | Westminster parliamentary constituency |
+| `ttwa_code` (ttwa15cd) | travel to work area |
+| `itl_code` (itl25cd) | international territorial level 3 (successor to NUTS3) |
+| `bua_code` (bua24cd) | built-up area |
+| `npark_code` (npark16cd) | national park |
+| `ruc_ind` (ruc21ind) | rural/urban classification, e.g. UN1 = urban nearer a major town |
+| `oac_ind` (oac11ind) | 2011 output area classification (demographic cluster, e.g. 5B3) |
+| `imd_rank` (imd20ind) | index of multiple deprivation rank of the LSOA, 1 = most deprived, per country (England 1–32,844) |
+| `wz_code` (wz11cd) | workplace zone |
+| `nhser_code`, `icb_code`, `sicbl_code` | NHS England region, integrated care board, sub-ICB location |
+| `lep1_code`, `lep2_code` | local enterprise partnership(s) |
+| `pfa_code` (pfa23cd) | police force area |
+
+# Address and postcode validation
+
+`main_pp_validation.py` (compose service `pp-validation`, needs both the
+Price Paid and NSPL data loaded) checks every row of `pp_transactions`
+against the NSPL and against the other sales at the same place, and writes
+one row per transaction to `land_registry.pp_address_validation`:
+
+- postcode checks: missing, unknown to the NSPL, terminated more than a
+  year before the sale; and, informationally, introduced more than a year
+  after the sale (Royal Mail recodes that the Land Registry applied to old
+  sales, concentrated in 1995–1999) and no coordinates;
+- geography name checks: `district` / `county` used by fewer than 1% of the
+  sales in the same local authority and year, `town_city` used by fewer than
+  1% of the sales in the same postcode district, and whether `district`
+  equals the NSPL local authority name after normalisation;
+- address checks: street used once at a postcode with 10+ sales, street
+  missing, PAON/SAON that fitted no pattern, flat without any identifier,
+  address says flat but `property_type` says house.
+
+`issue_count` sums the checks that indicate a bad row (the purely
+informational ones are excluded), the view
+`land_registry.pp_address_issues` joins the flagged rows back to their
+transactions, and `pp_address_validation_summary` keeps the counts per
+check per run.
+
 # Querying across datasets
 
 All datasets live in one database in separate schemas, so they join directly

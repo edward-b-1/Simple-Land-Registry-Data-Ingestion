@@ -68,6 +68,27 @@ services:
     volumes:
       - ./logs:/app/logs
 
+  # address / postcode validation of the Price Paid data against the NSPL
+  # (needs both the ingestion and ons-ingestion services to have run), run with:
+  #   docker compose run --rm pp-validation
+  pp-validation:
+    build: .
+    image: simple-land-registry-data-ingestion
+    container_name: land-registry-pp-validation
+    profiles:
+      - pp-validation
+    command: ["sh", "-c", "python /app/init_db.py && python /app/main_pp_validation.py"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
   # ONS National Statistics Postcode Lookup (postcode -> coordinates, LSOA,
   # local authority, region, rural/urban ...), latest quarterly release, run with:
   #   docker compose run --rm ons-ingestion

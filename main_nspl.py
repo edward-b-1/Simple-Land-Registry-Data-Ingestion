@@ -283,6 +283,9 @@ def transform_chunk(chunk: pandas.DataFrame) -> pandas.DataFrame:
     missing_coordinates = chunk['lat'] == MISSING_LATITUDE
     chunk.loc[missing_coordinates, ['lat', 'long']] = ''
 
+    # the IMD rank is 0 where there is none (Channel Islands, Isle of Man)
+    chunk.loc[chunk['imd_rank'] == '0', 'imd_rank'] = ''
+
     return chunk
 
 

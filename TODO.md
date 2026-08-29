@@ -108,6 +108,41 @@ implemented.
   category B from October 2013, but the data has category B rows back to
   1995. Understand what these are before using category B counts over time.
 
+## Address validation (`main_pp_validation.py`)
+
+First run over 31,411,536 rows flagged 2.1% with at least one issue
+(`postcode_missing` 50,369; `postcode_not_in_nspl` 1,190;
+`postcode_terminated_before_sale` 8,349; `district_unusual_for_lad_year`
+70,618; `county_unusual_for_lad_year` 24,386;
+`town_unusual_for_postcode_district` 3,106; `street_unusual_for_postcode`
+~10k; `address_unparsed` 162,423; `property_type_conflicts_address`
+62,184). The issue rate is 5.8% for 1995–1999 sales and ~1% after 2005;
+`district` matches the NSPL local authority name for 81% of 1995–1999 sales
+rising to 97% for 2025–2026 (the rest are pre-reorganisation names).
+Open questions:
+
+- **`postcode_introduced_after_sale` (322,964 rows, 1%)** was reclassified
+  as informational: almost all are 1995–1999 sales carrying a postcode the
+  NSPL introduced later, i.e. Royal Mail recodes (the 1998 York `YO8`
+  recode etc.) that the Land Registry did apply to old records. This also
+  means the "no backfill" finding for *missing* postcodes only applies where
+  no recode mapping exists. Worth confirming against a recode list.
+- **`postcode_terminated_before_sale` (8,349)** — a sale registered against
+  a postcode that had been dead for over a year (`CF1 1DF` in 2004, four
+  years after the Cardiff recode). Probably stale addresses on the
+  application; the NSPL has no old→new mapping, so these need the ONSPD or
+  Royal Mail's recode files to repair.
+- **`district_unusual_for_lad_year`** mostly flags postcodes that straddle
+  a local authority boundary (`BLACKBURN WITH DARWEN` vs Hyndburn). Which
+  side is right is undecidable from these two sources alone; treat the
+  NSPL side as canonical for analysis but do not "correct" the PPD value.
+- Thresholds (1% share, 100-sale groups, 10-sale postcodes, 1-year date
+  tolerance) are first guesses; revisit after looking at the flagged rows.
+- Checks not yet implemented: `locality` consistency; house-number
+  plausibility against the other numbers on the street; duplicate
+  detection on the normalised key + date + price with *different* raw
+  addresses (the same sale registered twice with a typo).
+
 ## Analysis pipeline
 
 - ~~ONS NSPL ingestion~~ — done (`main_nspl.py`, `ons` schema, latest
