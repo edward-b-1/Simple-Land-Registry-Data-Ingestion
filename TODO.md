@@ -110,13 +110,14 @@ implemented.
 
 ## Address validation (`main_pp_validation.py`)
 
-First run over 31,411,536 rows flagged 2.1% with at least one issue
-(`postcode_missing` 50,369; `postcode_not_in_nspl` 1,190;
+First run over 31,411,536 rows flagged 342,139 (1.09%) with at least one
+issue (`postcode_missing` 50,369; `postcode_not_in_nspl` 1,190;
 `postcode_terminated_before_sale` 8,349; `district_unusual_for_lad_year`
 70,618; `county_unusual_for_lad_year` 24,386;
 `town_unusual_for_postcode_district` 3,106; `street_unusual_for_postcode`
-~10k; `address_unparsed` 162,423; `property_type_conflicts_address`
-62,184). The issue rate is 5.8% for 1995–1999 sales and ~1% after 2005;
+7,849; `address_unparsed` 162,423; `property_type_conflicts_address`
+62,184); informational: `postcode_introduced_after_sale` 322,964,
+`street_missing` 500,026, `flat_without_identifier` 2,361,610.
 `district` matches the NSPL local authority name for 81% of 1995–1999 sales
 rising to 97% for 2025–2026 (the rest are pre-reorganisation names).
 Open questions:
