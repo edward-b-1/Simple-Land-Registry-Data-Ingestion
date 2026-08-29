@@ -87,18 +87,32 @@ implemented.
 - **First repeat-sales index build** should exclude flats without a SAON
   and pairs where `property_type` changes, and drop pairs outside ±3× per
   5 years, rather than wait for the normalisation.
-- **Validate address and geography fields against the postcode.** Once the
-  ONS Postcode Directory / NSPL is loaded, check `town_city`, `district` and
-  `county` against the postcode's official geography, flag inconsistent rows,
-  and use the postcode-derived geography as the canonical one.
+- **Validate address and geography fields against the postcode.** The NSPL
+  is now loaded (`ons.nspl_postcode`, May 2026 release): 1,335,003 of the
+  1,335,540 distinct postcodes in `pp_transactions` match (31,359,977 of
+  31,361,167 sales; 53,258 sales are on postcodes that have since been
+  terminated, so always join without a `doterm is null` filter). The 537
+  unmatched postcodes (1,190 sales, e.g. `TW8 0YY`, `SW8 4EF`) look like
+  new-build postcodes registered before the NSPL picked them up — check
+  against the next release. Comparing the PPD `district` with the NSPL local
+  authority name: 4.7% of 2024–2026 market sales differ, almost all naming
+  convention (`CITY OF BRISTOL` vs `Bristol, City of`, `WREKIN` vs `Telford
+  and Wrekin`, `RHONDDA CYNON TAFF` vs `... Taf`); the rate rises to ~20% for
+  1995–2009 sales because the PPD records the authority as it was at the
+  time (pre-reorganisation). Next steps: add `lad_code` / `rgn_code` /
+  `lsoa_code` to `pp_transactions` (or a view) from the NSPL and treat them
+  as the canonical geography; build a name-normalisation map for the
+  convention differences so genuine mismatches can be flagged; do the same
+  for `county` and `town_city`.
 - **Category B before October 2013.** The Land Registry only collected
   category B from October 2013, but the data has category B rows back to
   1995. Understand what these are before using category B counts over time.
 
 ## Analysis pipeline
 
-- ONS Postcode Directory / NSPL ingestion (postcode → lat/long, LSOA, local
-  authority, region), see `ANALYSIS_IDEAS.md`.
+- ~~ONS NSPL ingestion~~ — done (`main_nspl.py`, `ons` schema, latest
+  quarterly release resolved automatically). Remaining: join the NSPL
+  geography into `pp_transactions` (see the validation item above).
 - Repeat-sales pairs table and the relative price index, see
   `PRICE_INDEX.md`.
 - Replacement Bank of England series for effective rates on new advances

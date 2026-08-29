@@ -10,6 +10,7 @@ refreshed independently:
 |---|---|---|---|
 | Land Registry Price Paid data | `ingestion` | `land_registry` | `main.py` |
 | Bank of England interest rates (Bank Rate, quoted and effective mortgage rates) | `boe-ingestion` | `bank_of_england` | `main_boe_rates.py` |
+| ONS National Statistics Postcode Lookup (postcode → coordinates, LSOA, local authority, region, rural/urban) | `ons-ingestion` | `ons` | `main_nspl.py` |
 
 # Running with Docker (recommended)
 
@@ -27,6 +28,9 @@ docker compose run --rm ingestion
 
 # run the Bank of England interest rate sync (a few seconds)
 docker compose run --rm boe-ingestion
+
+# run the ONS postcode lookup sync (~190 MB download, a couple of minutes)
+docker compose run --rm ons-ingestion
 ```
 
 Both services share one image. Compose does not rebuild it automatically, so
@@ -145,6 +149,32 @@ schema on every run:
 To add a series, add one line to `BOE_SERIES_CONFIG` (code, table name,
 frequency, category) and run `init_db.py`; the table model is generated from
 the list and the description is taken from the Bank of England response.
+
+# ONS postcode data
+
+`main_nspl.py` finds the latest quarterly release of the ONS National
+Statistics Postcode Lookup on the Open Geography Portal (an ArcGIS hub, found
+through its search API; set `NSPL_ARCGIS_ITEM_ID` to pin a release instead),
+downloads the zip and reloads the `ons` schema on every run:
+
+- `nspl_postcode` — one row per postcode, current and terminated (`doterm`
+  is NULL for live postcodes), with grid reference, latitude/longitude
+  (NULL when the ONS has none), and the code of every geography the NSPL
+  carries: output area, LSOA/MSOA, local authority (`lad_code`), county,
+  ward, region (`rgn_code`, England only), country, constituency, travel to
+  work area, built-up area, rural/urban classification (`ruc_ind`), IMD
+  rank, and more. The NSPL's column names include the vintage of each
+  geography (`lad25cd`, `lsoa21cd`); they are mapped to stable names and the
+  raw header is kept in `nspl_metadata.csv_header`.
+- `nspl_code_lookup` — names for the codes, from the "names and codes"
+  documents in the zip: `lookup` is the geography (`lad`, `rgn`, `ctry`,
+  `cty`, `lsoa`, `msoa`, `pcon`, `ruc`, ...), plus `code`, `name` and the
+  Welsh name where given.
+- `nspl_metadata` — one row per run (append only).
+
+`pcds` has the same single-space form as `pp_transactions.postcode`, so the
+join is a plain equality; include terminated postcodes, since older sales
+were registered against postcodes that have since been retired.
 
 # Querying across datasets
 

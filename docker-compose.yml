@@ -9,6 +9,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DATABASE:-postgres}
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
+    # docker's default /dev/shm is 64 MB, which parallel queries over the
+    # 31M-row tables exhaust ("could not resize shared memory segment ...
+    # No space left on device"); takes effect on the next `docker compose up`
+    shm_size: 1gb
     volumes:
       # bind mount into the project directory for easy migration and so the
       # data cannot be removed by `docker system/volume prune`
@@ -58,6 +62,29 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DATABASE: ${POSTGRES_DATABASE:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
+  # ONS National Statistics Postcode Lookup (postcode -> coordinates, LSOA,
+  # local authority, region, rural/urban ...), latest quarterly release, run with:
+  #   docker compose run --rm ons-ingestion
+  ons-ingestion:
+    build: .
+    image: simple-land-registry-data-ingestion
+    container_name: ons-ingestion
+    profiles:
+      - ons-ingestion
+    command: ["sh", "-c", "python /app/init_db.py && python /app/main_nspl.py"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-postgres}
+      # optionally pin a release instead of resolving the latest one
+      NSPL_ARCGIS_ITEM_ID: ${NSPL_ARCGIS_ITEM_ID:-}
     depends_on:
       postgres:
         condition: service_healthy

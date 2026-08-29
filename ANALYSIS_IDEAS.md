@@ -56,7 +56,7 @@ the README); open questions are in `TODO.md`.
 
 | Dataset | Join key | What it unlocks |
 |---|---|---|
-| ONS Postcode Directory / NSPL | postcode | Lat/long, LSOA/MSOA, ward, local authority, region, rural/urban class. Foundational — nearly everything else joins through this. |
+| ONS National Statistics Postcode Lookup (NSPL) — **loaded, `ons.nspl_postcode` / `ons.nspl_code_lookup`** | postcode | Lat/long, LSOA/MSOA, ward, local authority, region, rural/urban class, IMD rank. Foundational — nearly everything else joins through this. |
 | EPC register (Energy Performance Certificates, open data) | address / UPRN | Floor area, bedrooms, build age, energy rating. Turns price into price per m², the biggest missing dimension in PPD. Also allows testing the "green premium". |
 | Index of Multiple Deprivation | LSOA | Price vs deprivation; gentrification detection (areas whose relative price rank rises fastest). |
 | Census 2021 | LSOA/MSOA | Tenure, household composition, occupation, age — explain price variance. |

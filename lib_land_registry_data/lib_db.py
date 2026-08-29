@@ -141,9 +141,103 @@ class IADBMetadata(BankOfEnglandBase):
     database_upload_duration: Mapped[timedelta]
 
 
+# Office for National Statistics data (the National Statistics Postcode
+# Lookup, NSPL) in its own schema
+class ONSBase(DeclarativeBase):
+    __table_args__ = {'schema': 'ons'}
+
+
+# one row per postcode (current and terminated) from the NSPL. The NSPL's
+# column names carry the vintage of each geography (lad25cd, lsoa21cd ...);
+# they are mapped to stable names here and the raw header is recorded in
+# nspl_metadata. Codes such as S99999999 / E99999999 are the NSPL's own
+# "not applicable" values and are kept as-is
+class NSPLPostcode(ONSBase):
+
+    __tablename__ = 'nspl_postcode'
+    __table_args__ = (
+        Index('ix_nspl_postcode_lad_code', 'lad_code'),
+        Index('ix_nspl_postcode_lsoa_code', 'lsoa_code'),
+        {'schema': 'ons'},
+    )
+
+    pcds: Mapped[str] = mapped_column(String(8), primary_key=True) # 'AB1 0AA', same form as pp_transactions.postcode
+    pcd7: Mapped[str] = mapped_column(String(7))
+    pcd8: Mapped[str] = mapped_column(String(8))
+    dointr: Mapped[Optional[date]] # date of introduction (first of month)
+    doterm: Mapped[Optional[date]] # date of termination, NULL when live
+    usrtypind: Mapped[Optional[str]] = mapped_column(String(1)) # 0 small user, 1 large user
+    east1m: Mapped[Optional[int]] # OS grid reference, NULL when not available
+    north1m: Mapped[Optional[int]]
+    gridind: Mapped[Optional[str]] = mapped_column(String(1)) # grid reference positional quality
+    lat: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6)) # NULL when not available
+    long: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    oa_code: Mapped[Optional[str]] = mapped_column(String(9)) # census output area
+    cty_code: Mapped[Optional[str]] = mapped_column(String(9)) # county
+    ced_code: Mapped[Optional[str]] = mapped_column(String(9)) # county electoral division
+    lad_code: Mapped[Optional[str]] = mapped_column(String(9)) # local authority district
+    wd_code: Mapped[Optional[str]] = mapped_column(String(9)) # electoral ward
+    nhser_code: Mapped[Optional[str]] = mapped_column(String(9)) # NHS England region
+    ctry_code: Mapped[Optional[str]] = mapped_column(String(9)) # country
+    rgn_code: Mapped[Optional[str]] = mapped_column(String(9)) # region (England only)
+    pcon_code: Mapped[Optional[str]] = mapped_column(String(9)) # Westminster constituency
+    ttwa_code: Mapped[Optional[str]] = mapped_column(String(9)) # travel to work area
+    itl_code: Mapped[Optional[str]] = mapped_column(String(9)) # international territorial level
+    npark_code: Mapped[Optional[str]] = mapped_column(String(9)) # national park
+    lsoa_code: Mapped[Optional[str]] = mapped_column(String(9)) # lower layer super output area
+    msoa_code: Mapped[Optional[str]] = mapped_column(String(9)) # middle layer super output area
+    wz_code: Mapped[Optional[str]] = mapped_column(String(9)) # workplace zone
+    sicbl_code: Mapped[Optional[str]] = mapped_column(String(9)) # sub integrated care board location
+    bua_code: Mapped[Optional[str]] = mapped_column(String(9)) # built up area
+    ruc_ind: Mapped[Optional[str]] = mapped_column(String(8)) # rural urban classification
+    oac_ind: Mapped[Optional[str]] = mapped_column(String(3)) # output area classification
+    lep1_code: Mapped[Optional[str]] = mapped_column(String(9)) # local enterprise partnership
+    lep2_code: Mapped[Optional[str]] = mapped_column(String(9))
+    pfa_code: Mapped[Optional[str]] = mapped_column(String(9)) # police force area
+    imd_rank: Mapped[Optional[int]] # index of multiple deprivation rank of the LSOA
+    icb_code: Mapped[Optional[str]] = mapped_column(String(9)) # integrated care board
+
+
+# names for the codes above, from the "names and codes" documents shipped
+# in the NSPL zip. `lookup` is the geography prefix ('lad', 'rgn', 'lsoa',
+# 'ruc' ...), suffixed '_sc' / '_ni' for the Scottish / Northern Irish
+# variants of a classification
+class NSPLCodeLookup(ONSBase):
+
+    __tablename__ = 'nspl_code_lookup'
+
+    lookup: Mapped[str] = mapped_column(String(16), primary_key=True)
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    name: Mapped[str]
+    name_welsh: Mapped[Optional[str]]
+    source_file: Mapped[str]
+
+
+# one row per ingestion run (append only)
+class NSPLMetadata(ONSBase):
+
+    __tablename__ = 'nspl_metadata'
+
+    nspl_metadata_id: Mapped[int] = mapped_column(primary_key=True)
+    release_name: Mapped[str] # e.g. 'May 2026'
+    arcgis_item_id: Mapped[str]
+    source_url: Mapped[str]
+    csv_file_name: Mapped[str]
+    csv_header: Mapped[str] # the raw column names, which carry the geography vintages
+    download_size_bytes: Mapped[int] = mapped_column(BigInteger)
+    postcode_count: Mapped[int]
+    live_postcode_count: Mapped[int]
+    lookup_count: Mapped[int]
+    process_start_timestamp: Mapped[datetime]
+    process_complete_timestamp: Mapped[datetime]
+    process_duration: Mapped[timedelta]
+    download_duration: Mapped[timedelta]
+    database_upload_duration: Mapped[timedelta]
+
+
 # every declarative base (one per data source); init_db.py creates the schema
 # and tables for all of them
-all_bases: list[type[DeclarativeBase]] = [LandRegistryBase, BankOfEnglandBase]
+all_bases: list[type[DeclarativeBase]] = [LandRegistryBase, BankOfEnglandBase, ONSBase]
 
 
 # cleaned, analysis-ready copy of pp_complete_data, rebuilt by
